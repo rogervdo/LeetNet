@@ -70,7 +70,21 @@
           <input type="number" id="max-strikes-input" min="1" max="30" value="3" />
           <button id="update-max-strikes-btn">Update</button>
         </div>
-        <p class="strikes-description">Consecutive days users haven't solved problems (starting from yesterday, GST)</p>
+        <div class="strikes-settings">
+          <label for="timezone-select">Timezone:</label>
+          <select id="timezone-select">
+            <option value="local">Local Timezone</option>
+            <option value="-6" selected>CST (UTC-6)</option>
+            <option value="-5">CDT (UTC-5)</option>
+            <option value="-8">PST (UTC-8)</option>
+            <option value="-7">PDT (UTC-7)</option>
+            <option value="-5">EST (UTC-5)</option>
+            <option value="-4">EDT (UTC-4)</option>
+            <option value="0">UTC (UTC+0)</option>
+            <option value="4">GST (UTC+4)</option>
+          </select>
+        </div>
+        <p class="strikes-description">Consecutive days users haven't solved problems (starting from yesterday)</p>
         <div id="strikes-list"></div>
       </div>
     </div>

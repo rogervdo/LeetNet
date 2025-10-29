@@ -154,13 +154,14 @@ export function displayLeaderboard(leaderboardStats, dailyStats, username, diff)
 /**
  * Displays users with strikes (consecutive days without solving problems).
  * @param {Array} strikesUsers - Array of user objects with username, avatar, and strikes count.
+ * @param {Array} clearedStrikesUsers - Array of user objects who cleared their strikes yesterday.
  * @param {string} currentUsername - The current user's username.
  */
-export function displayStrikesUsers(strikesUsers, currentUsername) {
+export function displayStrikesUsers(strikesUsers, clearedStrikesUsers, currentUsername) {
   const resultsContainer = document.getElementById('strikes-list');
   resultsContainer.innerHTML = ''; // Clear previous results
 
-  if (!strikesUsers || strikesUsers.length === 0) {
+  if ((!strikesUsers || strikesUsers.length === 0) && (!clearedStrikesUsers || clearedStrikesUsers.length === 0)) {
     resultsContainer.innerHTML = '<p>No strikes! Everyone is staying active!</p>';
     return;
   }
@@ -168,6 +169,7 @@ export function displayStrikesUsers(strikesUsers, currentUsername) {
   const list = document.createElement('ul');
   list.classList.add('strikes-users-list');
 
+  // Display users with current strikes
   strikesUsers.forEach(user => {
     const listItem = document.createElement('li');
     listItem.classList.add('strikes-user-item');
@@ -211,6 +213,40 @@ export function displayStrikesUsers(strikesUsers, currentUsername) {
     listItem.appendChild(strikesDisplay);
     list.appendChild(listItem);
   });
+
+  // Display users who cleared their strikes yesterday (at the bottom)
+  if (clearedStrikesUsers && clearedStrikesUsers.length > 0) {
+    clearedStrikesUsers.forEach(user => {
+      const listItem = document.createElement('li');
+      listItem.classList.add('strikes-user-item', 'cleared-strikes');
+
+      // Avatar
+      const avatar = document.createElement('img');
+      avatar.classList.add('profile-pic');
+      avatar.src = user.avatar;
+      avatar.alt = `${user.username}'s profile picture`;
+
+      // Username (display "You" for current user)
+      const username = document.createElement('p');
+      username.classList.add('strikes-username');
+      username.textContent = user.username === currentUsername ? 'You' : user.username;
+
+      // Checkmark indicator
+      const checkmarkDisplay = document.createElement('div');
+      checkmarkDisplay.classList.add('cleared-display');
+
+      const checkmarkEmoji = document.createElement('p');
+      checkmarkEmoji.classList.add('checkmark-emoji');
+      checkmarkEmoji.textContent = '✅';
+
+      checkmarkDisplay.appendChild(checkmarkEmoji);
+
+      listItem.appendChild(avatar);
+      listItem.appendChild(username);
+      listItem.appendChild(checkmarkDisplay);
+      list.appendChild(listItem);
+    });
+  }
 
   resultsContainer.appendChild(list);
 }

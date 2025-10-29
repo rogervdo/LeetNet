@@ -31,13 +31,16 @@ document.getElementById('submit-username').addEventListener('click', async () =>
         // Load in daily leaderboard data
         const dailyData = await loadDailyLeaderboardData([], username);
 
-        // Load strikes users data with stored max strikes value
-        chrome.storage.local.get({ maxStrikes: 3 }, async (maxStrikesResult) => {
-          const maxStrikes = maxStrikesResult.maxStrikes;
+        // Load strikes users data with stored max strikes and timezone values
+        chrome.storage.local.get({ maxStrikes: 3, timezone: '-6' }, async (result) => {
+          const maxStrikes = result.maxStrikes;
+          const timezone = result.timezone === 'local' ? 'local' : parseFloat(result.timezone);
           document.getElementById('max-strikes-input').value = maxStrikes;
-          const strikesData = await loadStrikesUsersData([], username, maxStrikes);
-          cachedStrikesData = strikesData;
-          displayStrikesUsers(strikesData, username);
+          document.getElementById('timezone-select').value = result.timezone;
+          const { strikesUsers, clearedStrikesUsers } = await loadStrikesUsersData([], username, maxStrikes, timezone);
+          cachedStrikesData = strikesUsers;
+          cachedClearedStrikesData = clearedStrikesUsers;
+          displayStrikesUsers(strikesUsers, clearedStrikesUsers, username);
         });
 
         let leaderboardData = [await getUserProblemStats(username)];
@@ -124,13 +127,16 @@ document.addEventListener('DOMContentLoaded', function() {
               const dailyData = await loadDailyLeaderboardData(result.friends, currUsername);
               console.log(dailyData);
 
-              // Load strikes users data with stored max strikes value
-              chrome.storage.local.get({ maxStrikes: 3 }, async (maxStrikesResult) => {
-                const maxStrikes = maxStrikesResult.maxStrikes;
+              // Load strikes users data with stored max strikes and timezone values
+              chrome.storage.local.get({ maxStrikes: 3, timezone: '-6' }, async (strikesResult) => {
+                const maxStrikes = strikesResult.maxStrikes;
+                const timezone = strikesResult.timezone === 'local' ? 'local' : parseFloat(strikesResult.timezone);
                 document.getElementById('max-strikes-input').value = maxStrikes;
-                const strikesData = await loadStrikesUsersData(result.friends, currUsername, maxStrikes);
-                cachedStrikesData = strikesData;
-                displayStrikesUsers(strikesData, currUsername);
+                document.getElementById('timezone-select').value = strikesResult.timezone;
+                const { strikesUsers, clearedStrikesUsers } = await loadStrikesUsersData(result.friends, currUsername, maxStrikes, timezone);
+                cachedStrikesData = strikesUsers;
+                cachedClearedStrikesData = clearedStrikesUsers;
+                displayStrikesUsers(strikesUsers, clearedStrikesUsers, currUsername);
               });
 
               // Load in friend leaderboard data
@@ -243,55 +249,75 @@ function isToday(timestamp) {
 
 
 /**
- * Helper function to check if a timestamp is from yesterday in GST timezone
- * GST (Gulf Standard Time) is UTC+4
+ * Helper function to check if a timestamp is from yesterday in specified timezone
+ * @param {number} timestamp - Unix timestamp
+ * @param {number|string} timezoneOffset - UTC offset in hours (e.g., -6 for CST) or 'local' for user's timezone
+ * @returns {boolean} - True if timestamp is from yesterday
  */
-function isYesterdayGST(timestamp) {
-    // Convert timestamp to GST
+function isYesterday(timestamp, timezoneOffset) {
     const date = new Date(timestamp * 1000);
 
-    // Get current date in GST
+    // Determine the offset to use
+    let offsetMinutes;
+    if (timezoneOffset === 'local') {
+        // Use the user's local timezone offset (in minutes, inverted sign)
+        offsetMinutes = -new Date().getTimezoneOffset();
+    } else {
+        // Use the provided UTC offset (convert hours to minutes)
+        offsetMinutes = timezoneOffset * 60;
+    }
+
+    // Get current date in target timezone
     const nowUTC = new Date();
-    const gstOffset = 4 * 60; // GST is UTC+4 (in minutes)
-    const nowGST = new Date(nowUTC.getTime() + gstOffset * 60 * 1000);
+    const nowTZ = new Date(nowUTC.getTime() + offsetMinutes * 60 * 1000);
 
-    // Get the submission date in GST
-    const submissionGST = new Date(date.getTime() + gstOffset * 60 * 1000);
+    // Get the submission date in target timezone
+    const submissionTZ = new Date(date.getTime() + offsetMinutes * 60 * 1000);
 
-    // Calculate yesterday's date in GST
-    const yesterdayGST = new Date(nowGST);
-    yesterdayGST.setDate(yesterdayGST.getDate() - 1);
+    // Calculate yesterday's date in target timezone
+    const yesterdayTZ = new Date(nowTZ);
+    yesterdayTZ.setDate(yesterdayTZ.getDate() - 1);
 
-    return submissionGST.getUTCDate() === yesterdayGST.getUTCDate() &&
-           submissionGST.getUTCMonth() === yesterdayGST.getUTCMonth() &&
-           submissionGST.getUTCFullYear() === yesterdayGST.getUTCFullYear();
+    return submissionTZ.getUTCDate() === yesterdayTZ.getUTCDate() &&
+           submissionTZ.getUTCMonth() === yesterdayTZ.getUTCMonth() &&
+           submissionTZ.getUTCFullYear() === yesterdayTZ.getUTCFullYear();
 }
 
 
 /**
- * Helper function to check if a timestamp is from a specific day offset in GST timezone
+ * Helper function to check if a timestamp is from a specific day offset in specified timezone
  * @param {number} timestamp - Unix timestamp
  * @param {number} daysAgo - Number of days before today (0 = today, 1 = yesterday, etc.)
+ * @param {number|string} timezoneOffset - UTC offset in hours (e.g., -6 for CST) or 'local' for user's timezone
  * @returns {boolean} - True if timestamp is from the specified day
  */
-function isDaysAgoGST(timestamp, daysAgo) {
+function isDaysAgo(timestamp, daysAgo, timezoneOffset) {
     const date = new Date(timestamp * 1000);
 
-    // Get current date in GST
+    // Determine the offset to use
+    let offsetMinutes;
+    if (timezoneOffset === 'local') {
+        // Use the user's local timezone offset (in minutes, inverted sign)
+        offsetMinutes = -new Date().getTimezoneOffset();
+    } else {
+        // Use the provided UTC offset (convert hours to minutes)
+        offsetMinutes = timezoneOffset * 60;
+    }
+
+    // Get current date in target timezone
     const nowUTC = new Date();
-    const gstOffset = 4 * 60; // GST is UTC+4 (in minutes)
-    const nowGST = new Date(nowUTC.getTime() + gstOffset * 60 * 1000);
+    const nowTZ = new Date(nowUTC.getTime() + offsetMinutes * 60 * 1000);
 
-    // Get the submission date in GST
-    const submissionGST = new Date(date.getTime() + gstOffset * 60 * 1000);
+    // Get the submission date in target timezone
+    const submissionTZ = new Date(date.getTime() + offsetMinutes * 60 * 1000);
 
-    // Calculate the target date in GST
-    const targetDateGST = new Date(nowGST);
-    targetDateGST.setDate(targetDateGST.getDate() - daysAgo);
+    // Calculate the target date in target timezone
+    const targetDateTZ = new Date(nowTZ);
+    targetDateTZ.setDate(targetDateTZ.getDate() - daysAgo);
 
-    return submissionGST.getUTCDate() === targetDateGST.getUTCDate() &&
-           submissionGST.getUTCMonth() === targetDateGST.getUTCMonth() &&
-           submissionGST.getUTCFullYear() === targetDateGST.getUTCFullYear();
+    return submissionTZ.getUTCDate() === targetDateTZ.getUTCDate() &&
+           submissionTZ.getUTCMonth() === targetDateTZ.getUTCMonth() &&
+           submissionTZ.getUTCFullYear() === targetDateTZ.getUTCFullYear();
 }
 
 
@@ -301,11 +327,13 @@ function isDaysAgoGST(timestamp, daysAgo) {
  * @param {string[]} friends - An array of usernames representing the friends of the current user
  * @param {string} username - The username of the current user
  * @param {number} maxStrikes - Maximum number of strikes to check (days back from yesterday)
+ * @param {number|string} timezoneOffset - UTC offset in hours (e.g., -6 for CST) or 'local' for user's timezone
  * @returns {object[]} - An array of user objects with their strike count
  */
-async function loadStrikesUsersData(friends, username, maxStrikes = 3) {
+async function loadStrikesUsersData(friends, username, maxStrikes = 3, timezoneOffset = -6) {
   let allUsers = [username, ...friends];
   let strikesUsers = [];
+  let clearedStrikesUsers = [];
 
   // Check each user
   for (const user of allUsers) {
@@ -321,7 +349,7 @@ async function loadStrikesUsersData(friends, username, maxStrikes = 3) {
     let strikeCount = 0;
     for (let daysAgo = 1; daysAgo <= maxStrikes; daysAgo++) {
       const daySubmissions = submissions.filter(submission =>
-        isDaysAgoGST(submission.timestamp, daysAgo)
+        isDaysAgo(submission.timestamp, daysAgo, timezoneOffset)
       );
 
       // If no submissions for this day, increment strike
@@ -333,22 +361,57 @@ async function loadStrikesUsersData(friends, username, maxStrikes = 3) {
       }
     }
 
-    // Only add users with at least one strike
+    const userData = await getUserProfilePic(user);
+
+    // Check if user solved yesterday
+    const yesterdaySubmissions = submissions.filter(submission =>
+      isDaysAgo(submission.timestamp, 1, timezoneOffset)
+    );
+    const solvedYesterday = yesterdaySubmissions.length > 0;
+
+    // Add to appropriate list
     if (strikeCount > 0) {
-      const userData = await getUserProfilePic(user);
+      // User has current strikes
       strikesUsers.push({
         username: user,
         avatar: userData.userAvatar,
         strikes: strikeCount,
         clearsToday: clearsToday
       });
+    } else if (solvedYesterday) {
+      // User solved yesterday and has no current strikes
+      // Check if they would have had strikes if they didn't solve yesterday
+      // by checking if they have any missing days from day 2 onwards
+      let wouldHaveHadStrikes = false;
+      for (let daysAgo = 2; daysAgo <= maxStrikes + 1; daysAgo++) {
+        const daySubmissions = submissions.filter(submission =>
+          isDaysAgo(submission.timestamp, daysAgo, timezoneOffset)
+        );
+        if (daySubmissions.length === 0) {
+          // Found a gap - this means they would have had strikes
+          wouldHaveHadStrikes = true;
+          break;
+        } else {
+          // Found a submission - streak was broken, so no previous strikes
+          break;
+        }
+      }
+
+      // Only add to cleared list if they actually cleared strikes
+      if (wouldHaveHadStrikes) {
+        clearedStrikesUsers.push({
+          username: user,
+          avatar: userData.userAvatar,
+          clearedStrikes: true
+        });
+      }
     }
   }
 
   // Sort by strikes descending (most strikes first)
   strikesUsers.sort((a, b) => b.strikes - a.strikes);
 
-  return strikesUsers;
+  return { strikesUsers, clearedStrikesUsers };
 }
 
 
@@ -404,12 +467,39 @@ document.getElementById('update-max-strikes-btn').addEventListener('click', asyn
   chrome.storage.local.set({ maxStrikes: maxStrikes }, async () => {
     console.log('Max strikes set to ' + maxStrikes);
 
-    // Reload strikes data with new max value
-    chrome.storage.local.get(['username', 'friends'], async (result) => {
+    // Reload strikes data with new max value and current timezone
+    chrome.storage.local.get(['username', 'friends', 'timezone'], async (result) => {
       if (result.username) {
-        const strikesData = await loadStrikesUsersData(result.friends || [], result.username, maxStrikes);
-        cachedStrikesData = strikesData;
-        displayStrikesUsers(strikesData, result.username);
+        const timezone = result.timezone === 'local' ? 'local' : parseFloat(result.timezone || '-6');
+        const { strikesUsers, clearedStrikesUsers } = await loadStrikesUsersData(result.friends || [], result.username, maxStrikes, timezone);
+        cachedStrikesData = strikesUsers;
+        cachedClearedStrikesData = clearedStrikesUsers;
+        displayStrikesUsers(strikesUsers, clearedStrikesUsers, result.username);
+      }
+    });
+  });
+});
+
+/**
+ * Listener for timezone setting change
+ */
+document.getElementById('timezone-select').addEventListener('change', async () => {
+  const timezoneSelect = document.getElementById('timezone-select');
+  const selectedTimezone = timezoneSelect.value;
+
+  // Store the timezone value
+  chrome.storage.local.set({ timezone: selectedTimezone }, async () => {
+    console.log('Timezone set to ' + selectedTimezone);
+
+    // Reload strikes data with new timezone
+    chrome.storage.local.get(['username', 'friends', 'maxStrikes'], async (result) => {
+      if (result.username) {
+        const maxStrikes = result.maxStrikes || 3;
+        const timezone = selectedTimezone === 'local' ? 'local' : parseFloat(selectedTimezone);
+        const { strikesUsers, clearedStrikesUsers } = await loadStrikesUsersData(result.friends || [], result.username, maxStrikes, timezone);
+        cachedStrikesData = strikesUsers;
+        cachedClearedStrikesData = clearedStrikesUsers;
+        displayStrikesUsers(strikesUsers, clearedStrikesUsers, result.username);
       }
     });
   });
@@ -419,11 +509,23 @@ document.getElementById('update-max-strikes-btn').addEventListener('click', asyn
  * Listener for copy strikes button
  */
 let cachedStrikesData = [];
+let cachedClearedStrikesData = [];
 
 document.getElementById('copy-strikes-btn').addEventListener('click', () => {
-  if (!cachedStrikesData || cachedStrikesData.length === 0) {
+  if ((!cachedStrikesData || cachedStrikesData.length === 0) && (!cachedClearedStrikesData || cachedClearedStrikesData.length === 0)) {
     alert('No strikes data to copy!');
     return;
+  }
+
+  // Build the formatted text
+  let clipboardText = '';
+
+  // Add cleared strikes users first (with checkmark)
+  if (cachedClearedStrikesData && cachedClearedStrikesData.length > 0) {
+    cachedClearedStrikesData.forEach(user => {
+      clipboardText += `${user.username} ✅\n`;
+    });
+    clipboardText += '\n';
   }
 
   // Group users by strike count
@@ -440,8 +542,7 @@ document.getElementById('copy-strikes-btn').addEventListener('click', () => {
     .map(Number)
     .sort((a, b) => a - b);
 
-  // Build the formatted text
-  let clipboardText = '';
+  // Add strikes sections
   sortedStrikeNumbers.forEach(strikeCount => {
     const emojis = '❌'.repeat(strikeCount);
     clipboardText += `Strike ${strikeCount} ${emojis}:\n`;
