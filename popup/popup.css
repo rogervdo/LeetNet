@@ -1,31 +1,31 @@
 /* || Color scheme styles */
 :root {
   --primary-color: #313131;
-  --secondary-color: #1A1A1A;
-  --font-color: #FFF;
-  --bg-color: #1E1E1E;
-  --heading-color: #FFF;
-  --toggle-bg-color: #FFF;
-  --toggle-circle-color: #282C34;
-  --inactive-tab-color: #A9A9A9;
-  --active-tab-line-color: #FFF;
+  --secondary-color: #1a1a1a;
+  --font-color: #fff;
+  --bg-color: #1e1e1e;
+  --heading-color: #fff;
+  --toggle-bg-color: #fff;
+  --toggle-circle-color: #282c34;
+  --inactive-tab-color: #a9a9a9;
+  --active-tab-line-color: #fff;
   --item-bg-color: #2c2c2e;
   --diff-color-easy: #28a745;
   --diff-color-medium: #ffc107;
   --diff-color-hard: #dc3545;
   --timestamp-color: #8e8e93;
-  --link-color: lightskyblue; 
+  --link-color: lightskyblue;
 }
 
-[data-theme="light"] {
-  --primary-color: #F0F0F0;
-  --secondary-color: #FFF;
+[data-theme='light'] {
+  --primary-color: #f0f0f0;
+  --secondary-color: #fff;
   --font-color: #000;
-  --bg-color: #FFF;
+  --bg-color: #fff;
   --heading-color: #292922;
   --toggle-bg-color: #000;
-  --toggle-circle-color: #FFF;
-  --inactive-tab-color: #7F7F7F;
+  --toggle-circle-color: #fff;
+  --inactive-tab-color: #7f7f7f;
   --active-tab-line-color: #000;
   --item-bg-color: #e4e4eb;
   --diff-color-easy: #28a745; /* Green for easy */
@@ -37,15 +37,15 @@
 
 /* Specific difficulty colors */
 .easy {
-    color: var(--diff-color-easy) !important;
+  color: var(--diff-color-easy) !important;
 }
 
 .medium {
-    color: var(--diff-color-medium) !important;
+  color: var(--diff-color-medium) !important;
 }
 
 .hard {
-    color: var(--diff-color-hard) !important;
+  color: var(--diff-color-hard) !important;
 }
 
 .daily {
@@ -54,7 +54,8 @@
 
 /* || Main page styles */
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica", "Arial", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica', 'Arial', sans-serif, 'Apple Color Emoji',
+    'Segoe UI Emoji';
   margin: 0;
   padding: 0;
   background-color: var(--bg-color);
@@ -136,7 +137,6 @@ body {
   justify-content: center;
   background-color: var(--primary-color);
   border-bottom: 1px solid darkgray;
-
 }
 
 .tab {
@@ -159,7 +159,36 @@ body {
 }
 
 /* || Friend page styles */
-#friend-username, #username {
+#friends-list-container {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 5px;
+}
+
+.friends-list {
+  display: contents;
+}
+
+.friend-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--item-bg-color);
+  padding: 10px;
+  border-radius: 5px;
+  margin-bottom: 0px;
+}
+
+.friend-item span {
+  word-break: break-word;
+  flex-grow: 1;
+  margin-right: 8px;
+}
+
+#friend-username,
+#username {
   /* Input box style */
   display: inline-block;
   box-sizing: border-box;
@@ -196,7 +225,8 @@ body {
   padding: 5px;
 }
 
-#add-friend-btn:hover, #submit-username:hover {
+#add-friend-btn:hover,
+#submit-username:hover {
   background-color: darkgreen;
 }
 
@@ -210,11 +240,12 @@ body {
   text-align: center;
   border-radius: 4px;
   display: inline-block;
-  margin-left: 10px;
+  margin: 0;
+  cursor: pointer;
 }
 
 .remove-btn:hover {
-  background-color:#6c757d;
+  background-color: #6c757d;
 }
 
 .input-container {
@@ -308,6 +339,13 @@ li {
   border-radius: 50%;
 }
 
+.medal-icon {
+  width: 32px;
+  height: 32px;
+  margin-right: 8px;
+  object-fit: contain;
+}
+
 .stat-row-title {
   flex: 1;
   text-align: left;
@@ -342,3 +380,146 @@ li {
   background-color: var(--primary-color);
   color: var(--background-color);
 }
+
+/* || Strikes page styles */
+.strikes-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.strikes-header h2 {
+  margin: 0;
+}
+
+.copy-btn {
+  background-color: var(--item-bg-color);
+  border: 1px solid var(--inactive-tab-color);
+  color: var(--font-color);
+  font-size: 18px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.copy-btn:hover {
+  background-color: var(--primary-color);
+  transform: scale(1.05);
+}
+
+.copy-btn:active {
+  transform: scale(0.95);
+}
+
+.strikes-settings {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 15px 0;
+  padding: 10px;
+  background-color: var(--item-bg-color);
+  border-radius: 5px;
+}
+
+.strikes-settings label {
+  font-size: 14px;
+  color: var(--font-color);
+}
+
+#max-strikes-input {
+  width: 60px;
+  padding: 5px;
+  border: 1px solid var(--inactive-tab-color);
+  border-radius: 4px;
+  background-color: var(--bg-color);
+  color: var(--font-color);
+  font-size: 14px;
+  text-align: center;
+}
+
+#update-max-strikes-btn {
+  background-color: #28a745;
+  border: none;
+  color: var(--font-color);
+  padding: 5px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+#update-max-strikes-btn:hover {
+  background-color: darkgreen;
+}
+
+.strikes-description {
+  color: var(--timestamp-color);
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.strikes-users-list {
+  list-style-type: none;
+  padding: 0;
+}
+
+.strikes-user-item {
+  display: flex;
+  align-items: center;
+  background-color: var(--item-bg-color);
+  margin-bottom: 10px;
+  padding: 15px;
+  border-radius: 5px;
+}
+
+.strikes-username {
+  flex: 1;
+  text-align: left;
+  padding-left: 15px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--font-color);
+  margin: 0;
+}
+
+.clears-today {
+  margin: 0;
+  margin-right: 10px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--diff-color-easy);
+  background-color: rgba(40, 167, 69, 0.15);
+  border-radius: 4px;
+  white-space: nowrap;
+  visibility: hidden;
+}
+
+.clears-today:not(:empty) {
+  visibility: visible;
+}
+
+.strikes-display {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.strikes-text {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--diff-color-hard);
+}
+
+.strikes-emojis {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+

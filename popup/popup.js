@@ -1,7 +1,7 @@
 import getACSubmissions from '../GQLQueries/recentACSubmissions.js';
 import getUserProblemStats from '../GQLQueries/getUserProblemStats.js';
 import getUserProfilePic from '../GQLQueries/getUserProfilePic.js';
-import { displayFriendsList, displayLeaderboard, displayACSubmissions } from './display.js';
+import { displayFriendsList, displayLeaderboard, displayACSubmissions, displayStrikesUsers } from './display.js';
 
 
 /**
@@ -30,6 +30,16 @@ document.getElementById('submit-username').addEventListener('click', async () =>
         // display leaderboard for first time, repeat code since DOM update already happened
         // Load in daily leaderboard data
         const dailyData = await loadDailyLeaderboardData([], username);
+
+        // Load strikes users data with stored max strikes value
+        chrome.storage.local.get({ maxStrikes: 3 }, async (maxStrikesResult) => {
+          const maxStrikes = maxStrikesResult.maxStrikes;
+          document.getElementById('max-strikes-input').value = maxStrikes;
+          const strikesData = await loadStrikesUsersData([], username, maxStrikes);
+          cachedStrikesData = strikesData;
+          displayStrikesUsers(strikesData, username);
+        });
+
         let leaderboardData = [await getUserProblemStats(username)];
         console.log(leaderboardData)
 
@@ -113,6 +123,16 @@ document.addEventListener('DOMContentLoaded', function() {
               // Load in daily leaderboard data
               const dailyData = await loadDailyLeaderboardData(result.friends, currUsername);
               console.log(dailyData);
+
+              // Load strikes users data with stored max strikes value
+              chrome.storage.local.get({ maxStrikes: 3 }, async (maxStrikesResult) => {
+                const maxStrikes = maxStrikesResult.maxStrikes;
+                document.getElementById('max-strikes-input').value = maxStrikes;
+                const strikesData = await loadStrikesUsersData(result.friends, currUsername, maxStrikes);
+                cachedStrikesData = strikesData;
+                displayStrikesUsers(strikesData, currUsername);
+              });
+
               // Load in friend leaderboard data
               let leaderboardData = await getUserProblemStats(currUsername);
               Promise.all(result.friends.map(friend => getUserProblemStats(friend))).then((friendData) => {
@@ -212,13 +232,123 @@ async function loadDailyLeaderboardData(friends, username) {
 
 /**
  *  Helper function to filter submissions from today
- */ 
+ */
 function isToday(timestamp) {
     const today = new Date();
     const date = new Date(timestamp * 1000);
     return date.getDate() === today.getDate() &&
            date.getMonth() === today.getMonth() &&
            date.getFullYear() === today.getFullYear();
+}
+
+
+/**
+ * Helper function to check if a timestamp is from yesterday in GST timezone
+ * GST (Gulf Standard Time) is UTC+4
+ */
+function isYesterdayGST(timestamp) {
+    // Convert timestamp to GST
+    const date = new Date(timestamp * 1000);
+
+    // Get current date in GST
+    const nowUTC = new Date();
+    const gstOffset = 4 * 60; // GST is UTC+4 (in minutes)
+    const nowGST = new Date(nowUTC.getTime() + gstOffset * 60 * 1000);
+
+    // Get the submission date in GST
+    const submissionGST = new Date(date.getTime() + gstOffset * 60 * 1000);
+
+    // Calculate yesterday's date in GST
+    const yesterdayGST = new Date(nowGST);
+    yesterdayGST.setDate(yesterdayGST.getDate() - 1);
+
+    return submissionGST.getUTCDate() === yesterdayGST.getUTCDate() &&
+           submissionGST.getUTCMonth() === yesterdayGST.getUTCMonth() &&
+           submissionGST.getUTCFullYear() === yesterdayGST.getUTCFullYear();
+}
+
+
+/**
+ * Helper function to check if a timestamp is from a specific day offset in GST timezone
+ * @param {number} timestamp - Unix timestamp
+ * @param {number} daysAgo - Number of days before today (0 = today, 1 = yesterday, etc.)
+ * @returns {boolean} - True if timestamp is from the specified day
+ */
+function isDaysAgoGST(timestamp, daysAgo) {
+    const date = new Date(timestamp * 1000);
+
+    // Get current date in GST
+    const nowUTC = new Date();
+    const gstOffset = 4 * 60; // GST is UTC+4 (in minutes)
+    const nowGST = new Date(nowUTC.getTime() + gstOffset * 60 * 1000);
+
+    // Get the submission date in GST
+    const submissionGST = new Date(date.getTime() + gstOffset * 60 * 1000);
+
+    // Calculate the target date in GST
+    const targetDateGST = new Date(nowGST);
+    targetDateGST.setDate(targetDateGST.getDate() - daysAgo);
+
+    return submissionGST.getUTCDate() === targetDateGST.getUTCDate() &&
+           submissionGST.getUTCMonth() === targetDateGST.getUTCMonth() &&
+           submissionGST.getUTCFullYear() === targetDateGST.getUTCFullYear();
+}
+
+
+/**
+ * Loads strikes users data - calculates consecutive days users haven't solved problems
+ * starting from yesterday and checking up to maxStrikes days back
+ * @param {string[]} friends - An array of usernames representing the friends of the current user
+ * @param {string} username - The username of the current user
+ * @param {number} maxStrikes - Maximum number of strikes to check (days back from yesterday)
+ * @returns {object[]} - An array of user objects with their strike count
+ */
+async function loadStrikesUsersData(friends, username, maxStrikes = 3) {
+  let allUsers = [username, ...friends];
+  let strikesUsers = [];
+
+  // Check each user
+  for (const user of allUsers) {
+    const submissions = await getACSubmissions(user, 30);
+
+    // Check if user solved a problem today
+    const todaySubmissions = submissions.filter(submission =>
+      isToday(submission.timestamp)
+    );
+    const clearsToday = todaySubmissions.length > 0;
+
+    // Count consecutive days starting from yesterday (up to maxStrikes days)
+    let strikeCount = 0;
+    for (let daysAgo = 1; daysAgo <= maxStrikes; daysAgo++) {
+      const daySubmissions = submissions.filter(submission =>
+        isDaysAgoGST(submission.timestamp, daysAgo)
+      );
+
+      // If no submissions for this day, increment strike
+      if (daySubmissions.length === 0) {
+        strikeCount++;
+      } else {
+        // Stop counting if user was active (consecutive streak broken)
+        break;
+      }
+    }
+
+    // Only add users with at least one strike
+    if (strikeCount > 0) {
+      const userData = await getUserProfilePic(user);
+      strikesUsers.push({
+        username: user,
+        avatar: userData.userAvatar,
+        strikes: strikeCount,
+        clearsToday: clearsToday
+      });
+    }
+  }
+
+  // Sort by strikes descending (most strikes first)
+  strikesUsers.sort((a, b) => b.strikes - a.strikes);
+
+  return strikesUsers;
 }
 
 
@@ -259,11 +389,90 @@ document.getElementById('add-friend-btn').addEventListener('click', async () => 
 
 
 /**
+ * Listener for update max strikes button
+ */
+document.getElementById('update-max-strikes-btn').addEventListener('click', async () => {
+  const maxStrikesInput = document.getElementById('max-strikes-input');
+  const maxStrikes = parseInt(maxStrikesInput.value);
+
+  if (maxStrikes < 1 || maxStrikes > 30) {
+    alert('Please enter a value between 1 and 30');
+    return;
+  }
+
+  // Store the max strikes value
+  chrome.storage.local.set({ maxStrikes: maxStrikes }, async () => {
+    console.log('Max strikes set to ' + maxStrikes);
+
+    // Reload strikes data with new max value
+    chrome.storage.local.get(['username', 'friends'], async (result) => {
+      if (result.username) {
+        const strikesData = await loadStrikesUsersData(result.friends || [], result.username, maxStrikes);
+        cachedStrikesData = strikesData;
+        displayStrikesUsers(strikesData, result.username);
+      }
+    });
+  });
+});
+
+/**
+ * Listener for copy strikes button
+ */
+let cachedStrikesData = [];
+
+document.getElementById('copy-strikes-btn').addEventListener('click', () => {
+  if (!cachedStrikesData || cachedStrikesData.length === 0) {
+    alert('No strikes data to copy!');
+    return;
+  }
+
+  // Group users by strike count
+  const strikeGroups = {};
+  cachedStrikesData.forEach(user => {
+    if (!strikeGroups[user.strikes]) {
+      strikeGroups[user.strikes] = [];
+    }
+    strikeGroups[user.strikes].push(user.username);
+  });
+
+  // Sort strike numbers in ascending order
+  const sortedStrikeNumbers = Object.keys(strikeGroups)
+    .map(Number)
+    .sort((a, b) => a - b);
+
+  // Build the formatted text
+  let clipboardText = '';
+  sortedStrikeNumbers.forEach(strikeCount => {
+    const emojis = '❌'.repeat(strikeCount);
+    clipboardText += `Strike ${strikeCount} ${emojis}:\n`;
+    strikeGroups[strikeCount].forEach(username => {
+      clipboardText += `${username}\n`;
+    });
+    clipboardText += '\n';
+  });
+
+  // Copy to clipboard
+  navigator.clipboard.writeText(clipboardText.trim()).then(() => {
+    // Visual feedback
+    const button = document.getElementById('copy-strikes-btn');
+    const originalText = button.textContent;
+    button.textContent = '✓';
+    setTimeout(() => {
+      button.textContent = originalText;
+    }, 1000);
+  }).catch(err => {
+    console.error('Failed to copy:', err);
+    alert('Failed to copy to clipboard');
+  });
+});
+
+/**
  * Listener for tab changes
  */
 document.getElementById('activity-tab').addEventListener('click', () => showPage('activity'));
 document.getElementById('friends-tab').addEventListener('click', () => showPage('friends'));
 document.getElementById('leaderboard-tab').addEventListener('click', () => showPage('leaderboard'));
+document.getElementById('strikes-tab').addEventListener('click', () => showPage('strikes'));
 
 /**
  * Changes which page is shown as content based off tab bar.

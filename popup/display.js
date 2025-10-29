@@ -100,6 +100,25 @@ export function displayLeaderboard(leaderboardStats, dailyStats, username, diff)
       avatar.src = `${stat.avatar}`;
       avatar.alt = `${stat.username}'s profile picture`;
 
+      // Medal for top 3 positions
+      let medal = null;
+      if (idx === 0) {
+        medal = document.createElement('img');
+        medal.classList.add('medal-icon');
+        medal.src = '../gold-medal.png';
+        medal.alt = 'Gold medal';
+      } else if (idx === 1) {
+        medal = document.createElement('img');
+        medal.classList.add('medal-icon');
+        medal.src = '../silver-medal.png';
+        medal.alt = 'Silver medal';
+      } else if (idx === 2) {
+        medal = document.createElement('img');
+        medal.classList.add('medal-icon');
+        medal.src = '../bronze-medal.png';
+        medal.alt = 'Bronze medal';
+      }
+
       // Username
       const title = document.createElement('p');
       title.classList.add('stat-row-title');
@@ -113,6 +132,9 @@ export function displayLeaderboard(leaderboardStats, dailyStats, username, diff)
 
       listItem.appendChild(avatar);
       listItem.appendChild(title);
+      if (medal) {
+        listItem.appendChild(medal);
+      }
       listItem.appendChild(solved);
 
       list.appendChild(listItem);
@@ -129,6 +151,70 @@ export function displayLeaderboard(leaderboardStats, dailyStats, username, diff)
  * @param {Array} submissions - The submissions data of all friends and self.
  * @param {string} username - The current username.
  */
+/**
+ * Displays users with strikes (consecutive days without solving problems).
+ * @param {Array} strikesUsers - Array of user objects with username, avatar, and strikes count.
+ * @param {string} currentUsername - The current user's username.
+ */
+export function displayStrikesUsers(strikesUsers, currentUsername) {
+  const resultsContainer = document.getElementById('strikes-list');
+  resultsContainer.innerHTML = ''; // Clear previous results
+
+  if (!strikesUsers || strikesUsers.length === 0) {
+    resultsContainer.innerHTML = '<p>No strikes! Everyone is staying active!</p>';
+    return;
+  }
+
+  const list = document.createElement('ul');
+  list.classList.add('strikes-users-list');
+
+  strikesUsers.forEach(user => {
+    const listItem = document.createElement('li');
+    listItem.classList.add('strikes-user-item');
+
+    // Avatar
+    const avatar = document.createElement('img');
+    avatar.classList.add('profile-pic');
+    avatar.src = user.avatar;
+    avatar.alt = `${user.username}'s profile picture`;
+
+    // Username (display "You" for current user)
+    const username = document.createElement('p');
+    username.classList.add('strikes-username');
+    username.textContent = user.username === currentUsername ? 'You' : user.username;
+
+    // "Clears Today" indicator (if user solved a problem today)
+    const clearsTodayIndicator = document.createElement('p');
+    clearsTodayIndicator.classList.add('clears-today');
+    if (user.clearsToday) {
+      clearsTodayIndicator.textContent = 'Clears Today';
+    }
+
+    // Strikes display with X emojis
+    const strikesDisplay = document.createElement('div');
+    strikesDisplay.classList.add('strikes-display');
+
+    const strikesText = document.createElement('p');
+    strikesText.classList.add('strikes-text');
+    strikesText.textContent = `Strike ${user.strikes}`;
+
+    const strikesEmojis = document.createElement('p');
+    strikesEmojis.classList.add('strikes-emojis');
+    strikesEmojis.textContent = '❌'.repeat(user.strikes);
+
+    strikesDisplay.appendChild(strikesText);
+    strikesDisplay.appendChild(strikesEmojis);
+
+    listItem.appendChild(avatar);
+    listItem.appendChild(username);
+    listItem.appendChild(clearsTodayIndicator);
+    listItem.appendChild(strikesDisplay);
+    list.appendChild(listItem);
+  });
+
+  resultsContainer.appendChild(list);
+}
+
 export async function displayACSubmissions(submissions, username) {
   const resultsContainer = document.getElementById('graphql-results');
   resultsContainer.innerHTML = ''; // Clear previous results
