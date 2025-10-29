@@ -2,6 +2,13 @@ import getACSubmissions from '../GQLQueries/recentACSubmissions.js';
 import getUserProblemStats from '../GQLQueries/getUserProblemStats.js';
 import getUserProfilePic from '../GQLQueries/getUserProfilePic.js';
 import { displayFriendsList, displayLeaderboard, displayACSubmissions, displayStrikesUsers } from './display.js';
+import cache from '../utils/cache.js';
+import { createUpdateTimer, getSubmissionsCacheKeys, getUserStatsCacheKeys } from '../utils/updateTimer.js';
+
+// Global timer references
+let activityTimer = null;
+let leaderboardTimer = null;
+let strikesTimer = null;
 
 
 /**
@@ -82,11 +89,17 @@ document.getElementById('submit-username').addEventListener('click', async () =>
 
 /**
  * Listener for DOM Content Load (beginning of extension open)
- * 
+ *
  * Validate current username, fetch AC submissions of self and friendss,
  * fetch friend list, and fetch leaderboard data
  */
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
+    // Clean up expired cache entries on popup open
+    const removedCount = await cache.cleanExpired();
+    if (removedCount > 0) {
+        console.log(`Cleaned up ${removedCount} expired cache entries`);
+    }
+
     // DISABLED COLOR SCHEME TOGGLE - light mode looks bad
     // document.getElementById('mode-toggle').addEventListener('change', function() {
     //     if (this.checked) {
@@ -123,6 +136,11 @@ document.addEventListener('DOMContentLoaded', function() {
               // default to activity page
               showPage('activity');
 
+              // Initialize activity timer
+              const allUsers = [currUsername, ...result.friends];
+              if (activityTimer) activityTimer.destroy();
+              activityTimer = createUpdateTimer('activity', getSubmissionsCacheKeys(allUsers, 5));
+
               // Load in daily leaderboard data
               const dailyData = await loadDailyLeaderboardData(result.friends, currUsername);
               console.log(dailyData);
@@ -137,6 +155,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 cachedStrikesData = strikesUsers;
                 cachedClearedStrikesData = clearedStrikesUsers;
                 displayStrikesUsers(strikesUsers, clearedStrikesUsers, currUsername);
+
+                // Initialize strikes timer (uses submissions for 30 items)
+                if (strikesTimer) strikesTimer.destroy();
+                strikesTimer = createUpdateTimer('strikes', getSubmissionsCacheKeys(allUsers, 30));
               });
 
               // Load in friend leaderboard data
@@ -170,6 +192,14 @@ document.addEventListener('DOMContentLoaded', function() {
                   const defaultTab = document.querySelector('.leaderboard-tab[data-difficulty="All"]');
                   defaultTab.classList.add('active');
                   displayLeaderboard(friendData, null, currUsername, 0);
+
+                  // Initialize leaderboard timer (combines user stats and daily submissions)
+                  if (leaderboardTimer) leaderboardTimer.destroy();
+                  const leaderboardCacheKeys = [
+                    ...getUserStatsCacheKeys(allUsers),
+                    ...getSubmissionsCacheKeys(allUsers, 20)
+                  ];
+                  leaderboardTimer = createUpdateTimer('leaderboard', leaderboardCacheKeys);
                 })
                 
               });

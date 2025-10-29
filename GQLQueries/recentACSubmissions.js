@@ -1,4 +1,17 @@
+import cache, { TTL } from '../utils/cache.js';
+
 const getACSubmissions = async (username, limit) => {
+    // Check cache first
+    const cacheKey = `submissions_${username}_${limit}`;
+    const cachedData = await cache.get(cacheKey);
+
+    if (cachedData !== null) {
+        console.log(`Cache hit for submissions: ${username} (limit: ${limit})`);
+        return cachedData;
+    }
+
+    console.log(`Cache miss for submissions: ${username} (limit: ${limit}), fetching from API`);
+
     const query = `query getACSubmissions ($username: String!, $limit: Int!) {
         recentAcSubmissionList(username: $username, limit: $limit) {
             title
@@ -10,7 +23,7 @@ const getACSubmissions = async (username, limit) => {
     }`;
 
     const variables = {
-        username, 
+        username,
         limit
     };
 
@@ -38,6 +51,9 @@ const getACSubmissions = async (username, limit) => {
             ...submission,
             username,
         }));
+
+        // Cache the result with 10-minute TTL
+        await cache.set(cacheKey, submissions, TTL.SUBMISSIONS);
 
         return submissions;
     } catch (error) {

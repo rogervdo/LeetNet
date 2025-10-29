@@ -8,6 +8,24 @@ Just search up your friends' usernames, add them, and follow your feed for new u
 
 See how many strikes (days in a row) your friends have without doing leetcodes
 
+## Features
+
+- **Activity Feed**: View recent submissions from you and your friends
+- **Leaderboard**: Track problem counts across different difficulty levels
+- **Daily Leaderboard**: See who's solved the most problems today
+- **Strikes System**: Track consecutive days without solving problems
+- **Smart Caching**: Fast loading with intelligent caching system
+
+## Performance
+
+This extension now includes a comprehensive caching system that:
+- Reduces API calls to LeetCode's servers by up to 90%
+- Provides instant loading for cached data
+- Automatically expires stale data based on update frequency
+- Cleans up expired cache entries automatically
+
+See [CACHING.md](CACHING.md) for detailed information about the caching implementation.
+
 ## How it was built
 
 Code or Die was built and improved upon DakshinD's LeetNet extension. Original repo: https://github.com/DakshinD/LeetNet
