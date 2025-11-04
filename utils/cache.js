@@ -36,6 +36,9 @@ class Cache {
 
         return new Promise((resolve) => {
             chrome.storage.local.set({ [cacheKey]: cacheEntry }, () => {
+                if (chrome.runtime.lastError) {
+                    console.warn('Extension context invalidated:', chrome.runtime.lastError);
+                }
                 resolve();
             });
         });
@@ -51,6 +54,13 @@ class Cache {
 
         return new Promise((resolve) => {
             chrome.storage.local.get([cacheKey], (result) => {
+                // Check for extension context invalidation
+                if (chrome.runtime.lastError) {
+                    console.warn('Extension context invalidated:', chrome.runtime.lastError);
+                    resolve(null);
+                    return;
+                }
+
                 const cacheEntry = result[cacheKey];
 
                 if (!cacheEntry) {
@@ -91,6 +101,13 @@ class Cache {
 
         return new Promise((resolve) => {
             chrome.storage.local.get([cacheKey], (result) => {
+                // Check for extension context invalidation
+                if (chrome.runtime.lastError) {
+                    console.warn('Extension context invalidated:', chrome.runtime.lastError);
+                    resolve(null);
+                    return;
+                }
+
                 const cacheEntry = result[cacheKey];
 
                 if (!cacheEntry) {
@@ -122,6 +139,9 @@ class Cache {
         const cacheKey = this.getCacheKey(key);
         return new Promise((resolve) => {
             chrome.storage.local.remove([cacheKey], () => {
+                if (chrome.runtime.lastError) {
+                    console.warn('Extension context invalidated:', chrome.runtime.lastError);
+                }
                 resolve();
             });
         });
@@ -134,12 +154,22 @@ class Cache {
     async clear() {
         return new Promise((resolve) => {
             chrome.storage.local.get(null, (items) => {
+                // Check for extension context invalidation
+                if (chrome.runtime.lastError) {
+                    console.warn('Extension context invalidated:', chrome.runtime.lastError);
+                    resolve();
+                    return;
+                }
+
                 const cacheKeys = Object.keys(items).filter(key =>
                     key.startsWith(this.prefix)
                 );
 
                 if (cacheKeys.length > 0) {
                     chrome.storage.local.remove(cacheKeys, () => {
+                        if (chrome.runtime.lastError) {
+                            console.warn('Extension context invalidated:', chrome.runtime.lastError);
+                        }
                         resolve();
                     });
                 } else {
@@ -156,6 +186,13 @@ class Cache {
     async cleanExpired() {
         return new Promise((resolve) => {
             chrome.storage.local.get(null, (items) => {
+                // Check for extension context invalidation
+                if (chrome.runtime.lastError) {
+                    console.warn('Extension context invalidated:', chrome.runtime.lastError);
+                    resolve(0);
+                    return;
+                }
+
                 const now = Date.now();
                 const expiredKeys = [];
 
@@ -167,6 +204,9 @@ class Cache {
 
                 if (expiredKeys.length > 0) {
                     chrome.storage.local.remove(expiredKeys, () => {
+                        if (chrome.runtime.lastError) {
+                            console.warn('Extension context invalidated:', chrome.runtime.lastError);
+                        }
                         resolve(expiredKeys.length);
                     });
                 } else {

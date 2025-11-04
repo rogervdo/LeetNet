@@ -11,13 +11,13 @@
       <div class="title">Code or Die</div>
       <div class="toggle-container">
         <img src="../icon.png" class="icon" />
+        <img src="../cogwheel.png" class="settings-icon" id="settings-icon" title="Settings" />
         <!-- <input type="checkbox" id="mode-toggle"> -->
         <!-- <label for="mode-toggle" class="toggle-label"></label> -->
       </div>
     </div>
     <div class="tab-bar">
       <button id="activity-tab" class="tab">Activity</button>
-      <button id="friends-tab" class="tab">Friends</button>
       <button id="leaderboard-tab" class="tab">Leaderboard</button>
       <button id="strikes-tab" class="tab">Strikes</button>
     </div>
@@ -33,19 +33,6 @@
           <h2>Activity</h2>
         </div>
         <div id="graphql-results"></div>
-      </div>
-
-      <div id="friends" class="page">
-        <div id="add-friend">
-          <h3>Add a Friend</h3>
-          <div class="input-container">
-            <input type="text" id="friend-username" placeholder="Input friend's username" />
-            <button id="add-friend-btn">+</button>
-          </div>
-        </div>
-
-        <h3>Friends List</h3>
-        <div id="friends-list-container"></div>
       </div>
 
       <div id="leaderboard" class="page">
@@ -71,27 +58,62 @@
           </div>
           <button id="copy-strikes-btn" class="copy-btn" title="Copy strikes to clipboard">📋</button>
         </div>
-        <div class="strikes-settings">
-          <label for="max-strikes-input">Max strikes to check:</label>
-          <input type="number" id="max-strikes-input" min="1" max="30" value="3" />
-          <button id="update-max-strikes-btn">Update</button>
-        </div>
-        <div class="strikes-settings">
-          <label for="timezone-select">Timezone:</label>
-          <select id="timezone-select">
-            <option value="local">Local Timezone</option>
-            <option value="-6" selected>CST (UTC-6)</option>
-            <option value="-5">CDT (UTC-5)</option>
-            <option value="-8">PST (UTC-8)</option>
-            <option value="-7">PDT (UTC-7)</option>
-            <option value="-5">EST (UTC-5)</option>
-            <option value="-4">EDT (UTC-4)</option>
-            <option value="0">UTC (UTC+0)</option>
-            <option value="4">GST (UTC+4)</option>
-          </select>
-        </div>
         <p class="strikes-description">Consecutive days users haven't solved problems (starting from yesterday)</p>
         <div id="strikes-list"></div>
+      </div>
+
+      <div id="settings" class="page">
+        <h2>Settings</h2>
+        <div class="settings-section">
+          <h3>Friends Management</h3>
+          <div class="settings-item">
+            <label>Add a Friend</label>
+            <div class="input-group">
+              <input type="text" id="friend-username" placeholder="Input friend's username" />
+              <button id="add-friend-btn">+</button>
+            </div>
+          </div>
+          <div class="settings-item">
+            <label>Friends List</label>
+            <div id="friends-list-container"></div>
+          </div>
+        </div>
+        <div class="settings-section">
+          <h3>Strikes Settings</h3>
+          <div class="settings-item">
+            <label for="max-strikes-input">Max strikes to check:</label>
+            <div class="input-group">
+              <input type="number" id="max-strikes-input" min="1" max="30" value="3" />
+              <button id="update-max-strikes-btn">Update</button>
+            </div>
+          </div>
+          <div class="settings-item">
+            <label for="timezone-select">Timezone:</label>
+            <select id="timezone-select">
+              <option value="auto">Auto-detect</option>
+              <option value="America/New_York">Eastern Time (ET)</option>
+              <option value="America/Chicago" selected>Central Time (CT)</option>
+              <option value="America/Denver">Mountain Time (MT)</option>
+              <option value="America/Los_Angeles">Pacific Time (PT)</option>
+              <option value="America/Anchorage">Alaska Time (AKT)</option>
+              <option value="Pacific/Honolulu">Hawaii Time (HT)</option>
+              <option value="Europe/London">London (GMT/BST)</option>
+              <option value="Europe/Paris">Paris (CET/CEST)</option>
+              <option value="Asia/Dubai">Dubai (GST)</option>
+              <option value="Asia/Kolkata">India (IST)</option>
+              <option value="Asia/Shanghai">China (CST)</option>
+              <option value="Asia/Tokyo">Japan (JST)</option>
+              <option value="Australia/Sydney">Sydney (AEDT/AEST)</option>
+              <option value="UTC">UTC</option>
+            </select>
+          </div>
+        </div>
+        <div class="settings-section">
+          <h3>Data Refresh</h3>
+          <div class="settings-item">
+            <button id="refresh-all-btn" class="action-btn">🔄 Refresh All Data</button>
+          </div>
+        </div>
       </div>
     </div>
     <script type="module" src="helper.js"></script>

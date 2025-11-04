@@ -4,6 +4,7 @@ import getUserProfilePic from '../GQLQueries/getUserProfilePic.js';
 import { displayFriendsList, displayLeaderboard, displayACSubmissions, displayStrikesUsers } from './display.js';
 import cache from '../utils/cache.js';
 import { createUpdateTimer, getSubmissionsCacheKeys, getUserStatsCacheKeys } from '../utils/updateTimer.js';
+import { getLocalDateString, getTodayInTimezone, getUserTimezone } from '../utils/timezoneHelper.js';
 
 // Global timer references
 let activityTimer = null;
@@ -35,49 +36,51 @@ document.getElementById('submit-username').addEventListener('click', async () =>
         showPage('activity');
 
         // display leaderboard for first time, repeat code since DOM update already happened
-        // Load in daily leaderboard data
-        const dailyData = await loadDailyLeaderboardData([], username);
-
-        // Load strikes users data with stored max strikes and timezone values
-        chrome.storage.local.get({ maxStrikes: 3, timezone: '-6' }, async (result) => {
+        // Load in daily leaderboard data with timezone
+        chrome.storage.local.get({ maxStrikes: 3, timezone: 'America/Chicago' }, async (result) => {
+          const timezone = result.timezone;
           const maxStrikes = result.maxStrikes;
-          const timezone = result.timezone === 'local' ? 'local' : parseFloat(result.timezone);
+
+          // Load daily leaderboard data
+          cachedDailyData = await loadDailyLeaderboardData([], username, timezone);
+
+          // Load strikes users data
           document.getElementById('max-strikes-input').value = maxStrikes;
           document.getElementById('timezone-select').value = result.timezone;
           const { strikesUsers, clearedStrikesUsers } = await loadStrikesUsersData([], username, maxStrikes, timezone);
           cachedStrikesData = strikesUsers;
           cachedClearedStrikesData = clearedStrikesUsers;
           displayStrikesUsers(strikesUsers, clearedStrikesUsers, username);
-        });
 
-        let leaderboardData = [await getUserProblemStats(username)];
-        console.log(leaderboardData)
+          // Load leaderboard data
+          let leaderboardData = [await getUserProblemStats(username)];
+          console.log(leaderboardData)
 
-
-        // Fetch all profile pics
-        leaderboardData = leaderboardData.map(async (stat) => {
-          const userData = await getUserProfilePic(stat.username);
-          const avatar = userData.userAvatar;
-          return { ...stat, avatar };
-        });
-
-        const leaderboardTabs = document.querySelectorAll('.leaderboard-tab');
-        Promise.all(leaderboardData).then((friendData) => {
-          leaderboardTabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-              // once tab is clicked, change active and display new leaderboard data
-              leaderboardTabs.forEach(t => t.classList.remove('active'));
-              tab.classList.add('active');
-              let difficulty = tab.getAttribute('data-difficulty');
-              const diffMap = {"All": 0, "Easy": 1, "Medium": 2, "Hard": 3, "Daily": 4};
-              displayLeaderboard(friendData, dailyData, username, diffMap[difficulty]);
-            });
+          // Fetch all profile pics
+          leaderboardData = leaderboardData.map(async (stat) => {
+            const userData = await getUserProfilePic(stat.username);
+            const avatar = userData.userAvatar;
+            return { ...stat, avatar };
           });
-          // load default tab as All for leaderboard
-          const defaultTab = document.querySelector('.leaderboard-tab[data-difficulty="All"]');
-          defaultTab.classList.add('active');
-          displayLeaderboard(friendData, null, username, 0);
-        })
+
+          const leaderboardTabs = document.querySelectorAll('.leaderboard-tab');
+          Promise.all(leaderboardData).then((friendData) => {
+            leaderboardTabs.forEach(tab => {
+              tab.addEventListener('click', () => {
+                // once tab is clicked, change active and display new leaderboard data
+                leaderboardTabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                let difficulty = tab.getAttribute('data-difficulty');
+                const diffMap = {"All": 0, "Easy": 1, "Medium": 2, "Hard": 3, "Daily": 4};
+                displayLeaderboard(friendData, cachedDailyData, username, diffMap[difficulty]);
+              });
+            });
+            // load default tab as All for leaderboard
+            const defaultTab = document.querySelector('.leaderboard-tab[data-difficulty="All"]');
+            defaultTab.classList.add('active');
+            displayLeaderboard(friendData, null, username, 0);
+          })
+        });
 
       });
     }
@@ -141,14 +144,14 @@ document.addEventListener('DOMContentLoaded', async function() {
               if (activityTimer) activityTimer.destroy();
               activityTimer = createUpdateTimer('activity', getSubmissionsCacheKeys(allUsers, 5));
 
-              // Load in daily leaderboard data
-              const dailyData = await loadDailyLeaderboardData(result.friends, currUsername);
-              console.log(dailyData);
-
               // Load strikes users data with stored max strikes and timezone values
-              chrome.storage.local.get({ maxStrikes: 3, timezone: '-6' }, async (strikesResult) => {
+              chrome.storage.local.get({ maxStrikes: 3, timezone: 'America/Chicago' }, async (strikesResult) => {
                 const maxStrikes = strikesResult.maxStrikes;
-                const timezone = strikesResult.timezone === 'local' ? 'local' : parseFloat(strikesResult.timezone);
+                const timezone = strikesResult.timezone;
+
+                // Load in daily leaderboard data with timezone
+                cachedDailyData = await loadDailyLeaderboardData(result.friends, currUsername, timezone);
+                console.log(cachedDailyData);
                 document.getElementById('max-strikes-input').value = maxStrikes;
                 document.getElementById('timezone-select').value = strikesResult.timezone;
                 const { strikesUsers, clearedStrikesUsers } = await loadStrikesUsersData(result.friends, currUsername, maxStrikes, timezone);
@@ -185,7 +188,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                       tab.classList.add('active');
                       let difficulty = tab.getAttribute('data-difficulty');
                       const diffMap = {"All": 0, "Easy": 1, "Medium": 2, "Hard": 3, "Daily": 4};
-                      displayLeaderboard(friendData, dailyData, currUsername, diffMap[difficulty]);
+                      displayLeaderboard(friendData, cachedDailyData, currUsername, diffMap[difficulty]);
                     });
                   });
                   // load default tab as All for leaderboard
@@ -217,11 +220,17 @@ document.addEventListener('DOMContentLoaded', async function() {
  * based on the count of their submissions.
  * @param {string[]} friends - An array of usernames representing the friends of the current user.
  * @param {string} username - The username of the current user.
+ * @param {string} timezone - IANA timezone string (e.g., "America/Chicago") or 'auto' for auto-detect
  * @returns {object[]} -An array of user objects containing daily leaderboard data.
  */
-async function loadDailyLeaderboardData(friends, username) {
+async function loadDailyLeaderboardData(friends, username, timezone = 'America/Chicago') {
+  // Handle auto-detect timezone
+  if (timezone === 'auto') {
+    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  }
+
   let allSubmissions = [];
-  
+
   // Get personal data
   const personalData = await getACSubmissions(username, 20);
   allSubmissions.push({
@@ -253,9 +262,9 @@ async function loadDailyLeaderboardData(friends, username) {
   // Wait for all profile pic promises to resolve
   const allSubmissionsWithAvatar = await Promise.all(allSubmissionsWithAvatarPromises);
 
-  // Now filter all submissions for each user
+  // Now filter all submissions for each user using the specified timezone
   allSubmissionsWithAvatar.forEach((user) => {
-    user.submissions = user.submissions.filter(submission => isToday(submission.timestamp));
+    user.submissions = user.submissions.filter(submission => isToday(submission.timestamp, timezone));
     user.count = user.submissions.length;
   });
 
@@ -267,87 +276,58 @@ async function loadDailyLeaderboardData(friends, username) {
 
 
 /**
- *  Helper function to filter submissions from today
+ *  Helper function to filter submissions from today in specified timezone
+ * @param {number} timestamp - Unix timestamp in seconds
+ * @param {string} timezone - IANA timezone string (e.g., "America/Chicago")
+ * @returns {boolean} - True if timestamp is from today in the specified timezone
  */
-function isToday(timestamp) {
-    const today = new Date();
-    const date = new Date(timestamp * 1000);
-    return date.getDate() === today.getDate() &&
-           date.getMonth() === today.getMonth() &&
-           date.getFullYear() === today.getFullYear();
+function isToday(timestamp, timezone) {
+    const submissionDate = getLocalDateString(timestamp, timezone);
+    const todayDate = getTodayInTimezone(timezone);
+    return submissionDate === todayDate;
 }
 
 
 /**
  * Helper function to check if a timestamp is from yesterday in specified timezone
- * @param {number} timestamp - Unix timestamp
- * @param {number|string} timezoneOffset - UTC offset in hours (e.g., -6 for CST) or 'local' for user's timezone
+ * @param {number} timestamp - Unix timestamp in seconds
+ * @param {string} timezone - IANA timezone string (e.g., "America/Chicago")
  * @returns {boolean} - True if timestamp is from yesterday
  */
-function isYesterday(timestamp, timezoneOffset) {
-    const date = new Date(timestamp * 1000);
+function isYesterday(timestamp, timezone) {
+    const submissionDate = getLocalDateString(timestamp, timezone);
 
-    // Determine the offset to use
-    let offsetMinutes;
-    if (timezoneOffset === 'local') {
-        // Use the user's local timezone offset (in minutes, inverted sign)
-        offsetMinutes = -new Date().getTimezoneOffset();
-    } else {
-        // Use the provided UTC offset (convert hours to minutes)
-        offsetMinutes = timezoneOffset * 60;
-    }
+    // Get yesterday's date in the specified timezone
+    const todayStr = getTodayInTimezone(timezone);
+    const todayParts = todayStr.split('-');
+    const todayInTZ = new Date(Date.UTC(parseInt(todayParts[0]), parseInt(todayParts[1]) - 1, parseInt(todayParts[2])));
+    todayInTZ.setUTCDate(todayInTZ.getUTCDate() - 1);
 
-    // Get current date in target timezone
-    const nowUTC = new Date();
-    const nowTZ = new Date(nowUTC.getTime() + offsetMinutes * 60 * 1000);
+    const yesterdayStr = todayInTZ.toISOString().split('T')[0];
 
-    // Get the submission date in target timezone
-    const submissionTZ = new Date(date.getTime() + offsetMinutes * 60 * 1000);
-
-    // Calculate yesterday's date in target timezone
-    const yesterdayTZ = new Date(nowTZ);
-    yesterdayTZ.setDate(yesterdayTZ.getDate() - 1);
-
-    return submissionTZ.getUTCDate() === yesterdayTZ.getUTCDate() &&
-           submissionTZ.getUTCMonth() === yesterdayTZ.getUTCMonth() &&
-           submissionTZ.getUTCFullYear() === yesterdayTZ.getUTCFullYear();
+    return submissionDate === yesterdayStr;
 }
 
 
 /**
  * Helper function to check if a timestamp is from a specific day offset in specified timezone
- * @param {number} timestamp - Unix timestamp
+ * @param {number} timestamp - Unix timestamp in seconds
  * @param {number} daysAgo - Number of days before today (0 = today, 1 = yesterday, etc.)
- * @param {number|string} timezoneOffset - UTC offset in hours (e.g., -6 for CST) or 'local' for user's timezone
+ * @param {string} timezone - IANA timezone string (e.g., "America/Chicago")
  * @returns {boolean} - True if timestamp is from the specified day
  */
-function isDaysAgo(timestamp, daysAgo, timezoneOffset) {
-    const date = new Date(timestamp * 1000);
+function isDaysAgo(timestamp, daysAgo, timezone) {
+    const submissionDate = getLocalDateString(timestamp, timezone);
 
-    // Determine the offset to use
-    let offsetMinutes;
-    if (timezoneOffset === 'local') {
-        // Use the user's local timezone offset (in minutes, inverted sign)
-        offsetMinutes = -new Date().getTimezoneOffset();
-    } else {
-        // Use the provided UTC offset (convert hours to minutes)
-        offsetMinutes = timezoneOffset * 60;
-    }
+    // Get the target date (daysAgo from today) in the specified timezone
+    const todayStr = getTodayInTimezone(timezone);
+    const todayParts = todayStr.split('-');
+    const targetDate = new Date(Date.UTC(parseInt(todayParts[0]), parseInt(todayParts[1]) - 1, parseInt(todayParts[2])));
+    targetDate.setUTCDate(targetDate.getUTCDate() - daysAgo);
 
-    // Get current date in target timezone
-    const nowUTC = new Date();
-    const nowTZ = new Date(nowUTC.getTime() + offsetMinutes * 60 * 1000);
+    const targetDateStr = targetDate.toISOString().split('T')[0];
 
-    // Get the submission date in target timezone
-    const submissionTZ = new Date(date.getTime() + offsetMinutes * 60 * 1000);
-
-    // Calculate the target date in target timezone
-    const targetDateTZ = new Date(nowTZ);
-    targetDateTZ.setDate(targetDateTZ.getDate() - daysAgo);
-
-    return submissionTZ.getUTCDate() === targetDateTZ.getUTCDate() &&
-           submissionTZ.getUTCMonth() === targetDateTZ.getUTCMonth() &&
-           submissionTZ.getUTCFullYear() === targetDateTZ.getUTCFullYear();
+    return submissionDate === targetDateStr;
 }
 
 
@@ -357,10 +337,14 @@ function isDaysAgo(timestamp, daysAgo, timezoneOffset) {
  * @param {string[]} friends - An array of usernames representing the friends of the current user
  * @param {string} username - The username of the current user
  * @param {number} maxStrikes - Maximum number of strikes to check (days back from yesterday)
- * @param {number|string} timezoneOffset - UTC offset in hours (e.g., -6 for CST) or 'local' for user's timezone
+ * @param {string} timezone - IANA timezone string (e.g., "America/Chicago") or 'auto' for auto-detect
  * @returns {object[]} - An array of user objects with their strike count
  */
-async function loadStrikesUsersData(friends, username, maxStrikes = 3, timezoneOffset = -6) {
+async function loadStrikesUsersData(friends, username, maxStrikes = 3, timezone = 'America/Chicago') {
+  // Handle auto-detect timezone
+  if (timezone === 'auto') {
+    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  }
   let allUsers = [username, ...friends];
   let strikesUsers = [];
   let clearedStrikesUsers = [];
@@ -371,15 +355,17 @@ async function loadStrikesUsersData(friends, username, maxStrikes = 3, timezoneO
 
     // Check if user solved a problem today
     const todaySubmissions = submissions.filter(submission =>
-      isToday(submission.timestamp)
+      isToday(submission.timestamp, timezone)
     );
     const clearsToday = todaySubmissions.length > 0;
+    // Get the most recent submission from today (if any)
+    const clearingSubmission = clearsToday ? todaySubmissions[0] : null;
 
     // Count consecutive days starting from yesterday (up to maxStrikes days)
     let strikeCount = 0;
     for (let daysAgo = 1; daysAgo <= maxStrikes; daysAgo++) {
       const daySubmissions = submissions.filter(submission =>
-        isDaysAgo(submission.timestamp, daysAgo, timezoneOffset)
+        isDaysAgo(submission.timestamp, daysAgo, timezone)
       );
 
       // If no submissions for this day, increment strike
@@ -395,7 +381,7 @@ async function loadStrikesUsersData(friends, username, maxStrikes = 3, timezoneO
 
     // Check if user solved yesterday
     const yesterdaySubmissions = submissions.filter(submission =>
-      isDaysAgo(submission.timestamp, 1, timezoneOffset)
+      isDaysAgo(submission.timestamp, 1, timezone)
     );
     const solvedYesterday = yesterdaySubmissions.length > 0;
 
@@ -406,7 +392,8 @@ async function loadStrikesUsersData(friends, username, maxStrikes = 3, timezoneO
         username: user,
         avatar: userData.userAvatar,
         strikes: strikeCount,
-        clearsToday: clearsToday
+        clearsToday: clearsToday,
+        clearingSubmission: clearingSubmission
       });
     } else if (solvedYesterday) {
       // User solved yesterday and has no current strikes
@@ -415,7 +402,7 @@ async function loadStrikesUsersData(friends, username, maxStrikes = 3, timezoneO
       let wouldHaveHadStrikes = false;
       for (let daysAgo = 2; daysAgo <= maxStrikes + 1; daysAgo++) {
         const daySubmissions = submissions.filter(submission =>
-          isDaysAgo(submission.timestamp, daysAgo, timezoneOffset)
+          isDaysAgo(submission.timestamp, daysAgo, timezone)
         );
         if (daySubmissions.length === 0) {
           // Found a gap - this means they would have had strikes
@@ -500,7 +487,7 @@ document.getElementById('update-max-strikes-btn').addEventListener('click', asyn
     // Reload strikes data with new max value and current timezone
     chrome.storage.local.get(['username', 'friends', 'timezone'], async (result) => {
       if (result.username) {
-        const timezone = result.timezone === 'local' ? 'local' : parseFloat(result.timezone || '-6');
+        const timezone = result.timezone || 'America/Chicago';
         const { strikesUsers, clearedStrikesUsers } = await loadStrikesUsersData(result.friends || [], result.username, maxStrikes, timezone);
         cachedStrikesData = strikesUsers;
         cachedClearedStrikesData = clearedStrikesUsers;
@@ -525,7 +512,7 @@ document.getElementById('timezone-select').addEventListener('change', async () =
     chrome.storage.local.get(['username', 'friends', 'maxStrikes'], async (result) => {
       if (result.username) {
         const maxStrikes = result.maxStrikes || 3;
-        const timezone = selectedTimezone === 'local' ? 'local' : parseFloat(selectedTimezone);
+        const timezone = selectedTimezone;
         const { strikesUsers, clearedStrikesUsers } = await loadStrikesUsersData(result.friends || [], result.username, maxStrikes, timezone);
         cachedStrikesData = strikesUsers;
         cachedClearedStrikesData = clearedStrikesUsers;
@@ -535,11 +522,14 @@ document.getElementById('timezone-select').addEventListener('change', async () =
   });
 });
 
+
+
 /**
  * Listener for copy strikes button
  */
 let cachedStrikesData = [];
 let cachedClearedStrikesData = [];
+let cachedDailyData = null;
 
 document.getElementById('copy-strikes-btn').addEventListener('click', () => {
   if ((!cachedStrikesData || cachedStrikesData.length === 0) && (!cachedClearedStrikesData || cachedClearedStrikesData.length === 0)) {
@@ -598,12 +588,121 @@ document.getElementById('copy-strikes-btn').addEventListener('click', () => {
 });
 
 /**
+ * Listener for refresh all data button in settings
+ */
+document.getElementById('refresh-all-btn').addEventListener('click', async () => {
+  const button = document.getElementById('refresh-all-btn');
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = '⏳ Refreshing...';
+
+  try {
+    chrome.storage.local.get(['username', 'friends', 'maxStrikes', 'timezone'], async (result) => {
+      const username = result.username;
+      const friends = result.friends || [];
+      const maxStrikes = result.maxStrikes || 3;
+      const timezone = result.timezone || 'America/Chicago';
+      const allUsers = [username, ...friends];
+
+      // Clear all caches
+      for (const user of allUsers) {
+        await cache.delete(`submissions_${user}_5`);
+        await cache.delete(`submissions_${user}_20`);
+        await cache.delete(`submissions_${user}_30`);
+        await cache.delete(`user_stats_${user}`);
+      }
+
+      // Reload all data
+      // Activity
+      let allSubmissions = [];
+      const data = await getACSubmissions(username, 5);
+      allSubmissions = allSubmissions.concat(data);
+      const friendDataPromises = friends.map(friend => getACSubmissions(friend, 5));
+      const friendData = await Promise.all(friendDataPromises);
+      friendData.forEach((submissions) => {
+        allSubmissions = allSubmissions.concat(submissions);
+      });
+      displayACSubmissions(allSubmissions, username);
+
+      // Leaderboard
+      cachedDailyData = await loadDailyLeaderboardData(friends, username, timezone);
+      let leaderboardData = await getUserProblemStats(username);
+      const leaderboardFriendPromises = friends.map(friend => getUserProblemStats(friend));
+      const leaderboardFriendData = await Promise.all(leaderboardFriendPromises);
+      leaderboardFriendData.push(leaderboardData);
+
+      const friendDataWithAvatars = leaderboardFriendData.map(async (stat) => {
+        const userData = await getUserProfilePic(stat.username);
+        const avatar = userData.userAvatar;
+        return { ...stat, avatar };
+      });
+      const friendDataResolved = await Promise.all(friendDataWithAvatars);
+
+      // Update leaderboard tabs
+      const leaderboardTabs = document.querySelectorAll('.leaderboard-tab');
+      leaderboardTabs.forEach(tab => {
+        const newTab = tab.cloneNode(true);
+        tab.parentNode.replaceChild(newTab, tab);
+      });
+
+      document.querySelectorAll('.leaderboard-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          document.querySelectorAll('.leaderboard-tab').forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          let difficulty = tab.getAttribute('data-difficulty');
+          const diffMap = {"All": 0, "Easy": 1, "Medium": 2, "Hard": 3, "Daily": 4};
+          displayLeaderboard(friendDataResolved, cachedDailyData, username, diffMap[difficulty]);
+        });
+      });
+
+      const activeTab = document.querySelector('.leaderboard-tab.active');
+      const difficulty = activeTab ? activeTab.getAttribute('data-difficulty') : 'All';
+      const diffMap = {"All": 0, "Easy": 1, "Medium": 2, "Hard": 3, "Daily": 4};
+      displayLeaderboard(friendDataResolved, cachedDailyData, username, diffMap[difficulty]);
+
+      // Strikes
+      const { strikesUsers, clearedStrikesUsers } = await loadStrikesUsersData(friends, username, maxStrikes, timezone);
+      cachedStrikesData = strikesUsers;
+      cachedClearedStrikesData = clearedStrikesUsers;
+      displayStrikesUsers(strikesUsers, clearedStrikesUsers, username);
+
+      // Restart all timers
+      if (activityTimer) activityTimer.destroy();
+      activityTimer = createUpdateTimer('activity', getSubmissionsCacheKeys(allUsers, 5));
+
+      if (leaderboardTimer) leaderboardTimer.destroy();
+      const leaderboardCacheKeys = [
+        ...getUserStatsCacheKeys(allUsers),
+        ...getSubmissionsCacheKeys(allUsers, 20)
+      ];
+      leaderboardTimer = createUpdateTimer('leaderboard', leaderboardCacheKeys);
+
+      if (strikesTimer) strikesTimer.destroy();
+      strikesTimer = createUpdateTimer('strikes', getSubmissionsCacheKeys(allUsers, 30));
+
+      button.disabled = false;
+      button.textContent = originalText;
+      alert('All data refreshed successfully!');
+    });
+  } catch (error) {
+    console.error('Error refreshing all data:', error);
+    button.disabled = false;
+    button.textContent = originalText;
+    alert('Error refreshing data. Please try again.');
+  }
+});
+
+/**
  * Listener for tab changes
  */
 document.getElementById('activity-tab').addEventListener('click', () => showPage('activity'));
-document.getElementById('friends-tab').addEventListener('click', () => showPage('friends'));
 document.getElementById('leaderboard-tab').addEventListener('click', () => showPage('leaderboard'));
 document.getElementById('strikes-tab').addEventListener('click', () => showPage('strikes'));
+
+/**
+ * Listener for settings icon in navbar
+ */
+document.getElementById('settings-icon').addEventListener('click', () => showPage('settings'));
 
 /**
  * Changes which page is shown as content based off tab bar.
@@ -613,15 +712,17 @@ function showPage(pageId) {
     document.querySelectorAll('.tab').forEach(tab => {
         tab.classList.remove('active');
     });
-    
+
     document.querySelectorAll('.page').forEach(page => {
         page.classList.remove('active');
     });
 
     document.getElementById(pageId).classList.add('active');
-    const activeTabId = (pageId === 'username-input') ? null : `${pageId.concat('-tab')}`;
-    if (activeTabId) {
-        document.getElementById(activeTabId).classList.add('active');
-    } 
+    // Settings page doesn't have a tab, it's triggered by the cogwheel icon
+    if (pageId === 'username-input' || pageId === 'settings') {
+        return;
+    }
+    const activeTabId = `${pageId.concat('-tab')}`;
+    document.getElementById(activeTabId).classList.add('active');
 }
 

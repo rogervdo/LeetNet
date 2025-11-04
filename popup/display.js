@@ -180,10 +180,20 @@ export function displayStrikesUsers(strikesUsers, clearedStrikesUsers, currentUs
     avatar.src = user.avatar;
     avatar.alt = `${user.username}'s profile picture`;
 
-    // Username (display "You" for current user)
+    // Username (display "You" for current user, make clickable for others)
     const username = document.createElement('p');
     username.classList.add('strikes-username');
-    username.textContent = user.username === currentUsername ? 'You' : user.username;
+
+    if (user.username === currentUsername) {
+      username.textContent = 'You';
+    } else {
+      const usernameLink = document.createElement('a');
+      usernameLink.href = `https://leetcode.com/${user.username}`;
+      usernameLink.textContent = user.username;
+      usernameLink.target = '_blank';
+      usernameLink.classList.add('username-link');
+      username.appendChild(usernameLink);
+    }
 
     // "Clears Today" indicator (if user solved a problem today)
     const clearsTodayIndicator = document.createElement('p');
@@ -226,10 +236,20 @@ export function displayStrikesUsers(strikesUsers, clearedStrikesUsers, currentUs
       avatar.src = user.avatar;
       avatar.alt = `${user.username}'s profile picture`;
 
-      // Username (display "You" for current user)
+      // Username (display "You" for current user, make clickable for others)
       const username = document.createElement('p');
       username.classList.add('strikes-username');
-      username.textContent = user.username === currentUsername ? 'You' : user.username;
+
+      if (user.username === currentUsername) {
+        username.textContent = 'You';
+      } else {
+        const usernameLink = document.createElement('a');
+        usernameLink.href = `https://leetcode.com/${user.username}`;
+        usernameLink.textContent = user.username;
+        usernameLink.target = '_blank';
+        usernameLink.classList.add('username-link');
+        username.appendChild(usernameLink);
+      }
 
       // Checkmark indicator
       const checkmarkDisplay = document.createElement('div');
