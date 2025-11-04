@@ -152,16 +152,17 @@ export function displayLeaderboard(leaderboardStats, dailyStats, username, diff)
  * @param {string} username - The current username.
  */
 /**
- * Displays users with strikes (consecutive days without solving problems).
+ * Displays users with strikes (consecutive days without solving problems) and streaks.
  * @param {Array} strikesUsers - Array of user objects with username, avatar, and strikes count.
  * @param {Array} clearedStrikesUsers - Array of user objects who cleared their strikes yesterday.
+ * @param {Array} streaksUsers - Array of user objects with username, avatar, streak count, and last problem date.
  * @param {string} currentUsername - The current user's username.
  */
-export function displayStrikesUsers(strikesUsers, clearedStrikesUsers, currentUsername) {
+export function displayStrikesUsers(strikesUsers, clearedStrikesUsers, streaksUsers, currentUsername) {
   const resultsContainer = document.getElementById('strikes-list');
   resultsContainer.innerHTML = ''; // Clear previous results
 
-  if ((!strikesUsers || strikesUsers.length === 0) && (!clearedStrikesUsers || clearedStrikesUsers.length === 0)) {
+  if ((!strikesUsers || strikesUsers.length === 0) && (!clearedStrikesUsers || clearedStrikesUsers.length === 0) && (!streaksUsers || streaksUsers.length === 0)) {
     resultsContainer.innerHTML = '<p>No strikes! Everyone is staying active!</p>';
     return;
   }
@@ -269,6 +270,71 @@ export function displayStrikesUsers(strikesUsers, clearedStrikesUsers, currentUs
   }
 
   resultsContainer.appendChild(list);
+
+  // Display streaks section below strikes
+  if (streaksUsers && streaksUsers.length > 0) {
+    const streaksHeader = document.createElement('h3');
+    streaksHeader.classList.add('streaks-header');
+    streaksHeader.textContent = 'Streaks';
+    resultsContainer.appendChild(streaksHeader);
+
+    const streaksList = document.createElement('ul');
+    streaksList.classList.add('streaks-users-list');
+
+    streaksUsers.forEach(user => {
+      const listItem = document.createElement('li');
+      listItem.classList.add('streaks-user-item');
+
+      // Avatar
+      const avatar = document.createElement('img');
+      avatar.classList.add('profile-pic');
+      avatar.src = user.avatar;
+      avatar.alt = `${user.username}'s profile picture`;
+
+      // Username (display "You" for current user, make clickable for others)
+      const username = document.createElement('p');
+      username.classList.add('streaks-username');
+
+      if (user.username === currentUsername) {
+        username.textContent = 'You';
+      } else {
+        const usernameLink = document.createElement('a');
+        usernameLink.href = `https://leetcode.com/${user.username}`;
+        usernameLink.textContent = user.username;
+        usernameLink.target = '_blank';
+        usernameLink.classList.add('username-link');
+        username.appendChild(usernameLink);
+      }
+
+      // Last problem date
+      const lastProblemDate = document.createElement('p');
+      lastProblemDate.classList.add('last-problem-date');
+      lastProblemDate.textContent = user.lastProblemDate;
+
+      // Streak display with fire emoji
+      const streakDisplay = document.createElement('div');
+      streakDisplay.classList.add('streak-display');
+
+      const streakText = document.createElement('p');
+      streakText.classList.add('streak-text');
+      streakText.textContent = `${user.streak}`;
+
+      const streakEmoji = document.createElement('p');
+      streakEmoji.classList.add('streak-emoji');
+      streakEmoji.textContent = '🔥';
+
+      streakDisplay.appendChild(streakText);
+      streakDisplay.appendChild(streakEmoji);
+
+      listItem.appendChild(avatar);
+      listItem.appendChild(username);
+      listItem.appendChild(lastProblemDate);
+      listItem.appendChild(streakDisplay);
+      streaksList.appendChild(listItem);
+    });
+
+    resultsContainer.appendChild(streaksList);
+  }
 }
 
 export async function displayACSubmissions(submissions, username) {

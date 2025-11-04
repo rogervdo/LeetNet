@@ -1,7 +1,7 @@
 {
   "name": "Code or Die",
   "description": "An extension to view the activity of your friends on LeetCode.",
-  "version": "1.3",
+  "version": "1.3.1",
   "manifest_version": 3,
   "browser_specific_settings": {
     "gecko": {

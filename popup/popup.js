@@ -47,10 +47,11 @@ document.getElementById('submit-username').addEventListener('click', async () =>
           // Load strikes users data
           document.getElementById('max-strikes-input').value = maxStrikes;
           document.getElementById('timezone-select').value = result.timezone;
-          const { strikesUsers, clearedStrikesUsers } = await loadStrikesUsersData([], username, maxStrikes, timezone);
+          const { strikesUsers, clearedStrikesUsers, streaksUsers } = await loadStrikesUsersData([], username, maxStrikes, timezone);
           cachedStrikesData = strikesUsers;
           cachedClearedStrikesData = clearedStrikesUsers;
-          displayStrikesUsers(strikesUsers, clearedStrikesUsers, username);
+          cachedStreaksData = streaksUsers;
+          displayStrikesUsers(strikesUsers, clearedStrikesUsers, streaksUsers, username);
 
           // Load leaderboard data
           let leaderboardData = [await getUserProblemStats(username)];
@@ -154,10 +155,11 @@ document.addEventListener('DOMContentLoaded', async function() {
                 console.log(cachedDailyData);
                 document.getElementById('max-strikes-input').value = maxStrikes;
                 document.getElementById('timezone-select').value = strikesResult.timezone;
-                const { strikesUsers, clearedStrikesUsers } = await loadStrikesUsersData(result.friends, currUsername, maxStrikes, timezone);
+                const { strikesUsers, clearedStrikesUsers, streaksUsers } = await loadStrikesUsersData(result.friends, currUsername, maxStrikes, timezone);
                 cachedStrikesData = strikesUsers;
                 cachedClearedStrikesData = clearedStrikesUsers;
-                displayStrikesUsers(strikesUsers, clearedStrikesUsers, currUsername);
+                cachedStreaksData = streaksUsers;
+                displayStrikesUsers(strikesUsers, clearedStrikesUsers, streaksUsers, currUsername);
 
                 // Initialize strikes timer (uses submissions for 30 items)
                 if (strikesTimer) strikesTimer.destroy();
@@ -333,12 +335,13 @@ function isDaysAgo(timestamp, daysAgo, timezone) {
 
 /**
  * Loads strikes users data - calculates consecutive days users haven't solved problems
- * starting from yesterday and checking up to maxStrikes days back
+ * starting from yesterday and checking up to maxStrikes days back.
+ * Also calculates streaks - consecutive days users have solved problems.
  * @param {string[]} friends - An array of usernames representing the friends of the current user
  * @param {string} username - The username of the current user
  * @param {number} maxStrikes - Maximum number of strikes to check (days back from yesterday)
  * @param {string} timezone - IANA timezone string (e.g., "America/Chicago") or 'auto' for auto-detect
- * @returns {object[]} - An array of user objects with their strike count
+ * @returns {object} - Object containing strikesUsers, clearedStrikesUsers, and streaksUsers arrays
  */
 async function loadStrikesUsersData(friends, username, maxStrikes = 3, timezone = 'America/Chicago') {
   // Handle auto-detect timezone
@@ -348,6 +351,7 @@ async function loadStrikesUsersData(friends, username, maxStrikes = 3, timezone 
   let allUsers = [username, ...friends];
   let strikesUsers = [];
   let clearedStrikesUsers = [];
+  let streaksUsers = [];
 
   // Check each user
   for (const user of allUsers) {
@@ -384,6 +388,28 @@ async function loadStrikesUsersData(friends, username, maxStrikes = 3, timezone 
       isDaysAgo(submission.timestamp, 1, timezone)
     );
     const solvedYesterday = yesterdaySubmissions.length > 0;
+
+    // Calculate streak - consecutive days with submissions
+    let streakCount = 0;
+    let lastProblemDate = null;
+    let startDay = clearsToday ? 0 : 1; // Start from today if solved today, else yesterday
+
+    for (let daysAgo = startDay; daysAgo < 30; daysAgo++) {
+      const daySubmissions = submissions.filter(submission =>
+        isDaysAgo(submission.timestamp, daysAgo, timezone)
+      );
+
+      if (daySubmissions.length > 0) {
+        streakCount++;
+        // Capture the last problem date (most recent in the streak)
+        if (lastProblemDate === null && daySubmissions.length > 0) {
+          lastProblemDate = getLocalDateString(daySubmissions[0].timestamp, timezone);
+        }
+      } else {
+        // Streak broken
+        break;
+      }
+    }
 
     // Add to appropriate list
     if (strikeCount > 0) {
@@ -423,12 +449,25 @@ async function loadStrikesUsersData(friends, username, maxStrikes = 3, timezone 
         });
       }
     }
+
+    // Add to streaks list if streak is 2 or more days
+    if (streakCount >= 2) {
+      streaksUsers.push({
+        username: user,
+        avatar: userData.userAvatar,
+        streak: streakCount,
+        lastProblemDate: lastProblemDate
+      });
+    }
   }
 
   // Sort by strikes descending (most strikes first)
   strikesUsers.sort((a, b) => b.strikes - a.strikes);
 
-  return { strikesUsers, clearedStrikesUsers };
+  // Sort streaks by streak count descending (longest streak first)
+  streaksUsers.sort((a, b) => b.streak - a.streak);
+
+  return { strikesUsers, clearedStrikesUsers, streaksUsers };
 }
 
 
@@ -488,10 +527,11 @@ document.getElementById('update-max-strikes-btn').addEventListener('click', asyn
     chrome.storage.local.get(['username', 'friends', 'timezone'], async (result) => {
       if (result.username) {
         const timezone = result.timezone || 'America/Chicago';
-        const { strikesUsers, clearedStrikesUsers } = await loadStrikesUsersData(result.friends || [], result.username, maxStrikes, timezone);
+        const { strikesUsers, clearedStrikesUsers, streaksUsers } = await loadStrikesUsersData(result.friends || [], result.username, maxStrikes, timezone);
         cachedStrikesData = strikesUsers;
         cachedClearedStrikesData = clearedStrikesUsers;
-        displayStrikesUsers(strikesUsers, clearedStrikesUsers, result.username);
+        cachedStreaksData = streaksUsers;
+        displayStrikesUsers(strikesUsers, clearedStrikesUsers, streaksUsers, result.username);
       }
     });
   });
@@ -513,10 +553,11 @@ document.getElementById('timezone-select').addEventListener('change', async () =
       if (result.username) {
         const maxStrikes = result.maxStrikes || 3;
         const timezone = selectedTimezone;
-        const { strikesUsers, clearedStrikesUsers } = await loadStrikesUsersData(result.friends || [], result.username, maxStrikes, timezone);
+        const { strikesUsers, clearedStrikesUsers, streaksUsers } = await loadStrikesUsersData(result.friends || [], result.username, maxStrikes, timezone);
         cachedStrikesData = strikesUsers;
         cachedClearedStrikesData = clearedStrikesUsers;
-        displayStrikesUsers(strikesUsers, clearedStrikesUsers, result.username);
+        cachedStreaksData = streaksUsers;
+        displayStrikesUsers(strikesUsers, clearedStrikesUsers, streaksUsers, result.username);
       }
     });
   });
@@ -529,18 +570,27 @@ document.getElementById('timezone-select').addEventListener('change', async () =
  */
 let cachedStrikesData = [];
 let cachedClearedStrikesData = [];
+let cachedStreaksData = [];
 let cachedDailyData = null;
 
 document.getElementById('copy-strikes-btn').addEventListener('click', () => {
-  if ((!cachedStrikesData || cachedStrikesData.length === 0) && (!cachedClearedStrikesData || cachedClearedStrikesData.length === 0)) {
-    alert('No strikes data to copy!');
+  if ((!cachedStrikesData || cachedStrikesData.length === 0) && (!cachedClearedStrikesData || cachedClearedStrikesData.length === 0) && (!cachedStreaksData || cachedStreaksData.length === 0)) {
+    alert('No data to copy!');
     return;
   }
 
   // Build the formatted text
   let clipboardText = '';
 
-  // Add cleared strikes users first (with checkmark)
+  // Add streaks first (sorted by streak count descending)
+  if (cachedStreaksData && cachedStreaksData.length > 0) {
+    cachedStreaksData.forEach(user => {
+      clipboardText += `${user.username} 🔥[${user.streak}]\n`;
+    });
+    clipboardText += '\n';
+  }
+
+  // Add cleared strikes users (with checkmark)
   if (cachedClearedStrikesData && cachedClearedStrikesData.length > 0) {
     cachedClearedStrikesData.forEach(user => {
       clipboardText += `${user.username} ✅\n`;
@@ -661,10 +711,11 @@ document.getElementById('refresh-all-btn').addEventListener('click', async () =>
       displayLeaderboard(friendDataResolved, cachedDailyData, username, diffMap[difficulty]);
 
       // Strikes
-      const { strikesUsers, clearedStrikesUsers } = await loadStrikesUsersData(friends, username, maxStrikes, timezone);
+      const { strikesUsers, clearedStrikesUsers, streaksUsers } = await loadStrikesUsersData(friends, username, maxStrikes, timezone);
       cachedStrikesData = strikesUsers;
       cachedClearedStrikesData = clearedStrikesUsers;
-      displayStrikesUsers(strikesUsers, clearedStrikesUsers, username);
+      cachedStreaksData = streaksUsers;
+      displayStrikesUsers(strikesUsers, clearedStrikesUsers, streaksUsers, username);
 
       // Restart all timers
       if (activityTimer) activityTimer.destroy();
