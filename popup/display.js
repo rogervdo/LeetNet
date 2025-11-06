@@ -337,8 +337,144 @@ export function displayStrikesUsers(strikesUsers, clearedStrikesUsers, streaksUs
   }
 }
 
-export async function displayACSubmissions(submissions, username) {
+/**
+ * Displays the contest leaderboard with weekly points
+ * @param {Array} contestData - Array of user objects with username, avatar, points, and submissions
+ * @param {string} weekStart - Start date of the week (YYYY-MM-DD)
+ * @param {string} weekEnd - End date of the week (YYYY-MM-DD)
+ * @param {string} currentUsername - The current user's username
+ */
+export function displayContestLeaderboard(contestData, weekStart, weekEnd, currentUsername) {
+  const resultsContainer = document.getElementById('contest-results');
+  const weekDatesContainer = document.getElementById('contest-week-dates');
+  resultsContainer.innerHTML = ''; // Clear previous results
+
+  // Display week dates
+  weekDatesContainer.textContent = `Week: ${weekStart} to ${weekEnd}`;
+
+  if (!contestData || contestData.length === 0) {
+    resultsContainer.innerHTML = '<p>No contest data available.</p>';
+    return;
+  }
+
+  // Create list
+  const list = document.createElement('ul');
+  list.classList.add('contest-list');
+
+  contestData.forEach((user, idx) => {
+    const listItem = document.createElement('li');
+    listItem.classList.add('contest-row');
+
+    // Rank
+    const rank = document.createElement('p');
+    rank.classList.add('contest-rank');
+    rank.textContent = `#${idx + 1}`;
+
+    // Avatar
+    const avatar = document.createElement('img');
+    avatar.classList.add('profile-pic');
+    avatar.src = user.avatar;
+    avatar.alt = `${user.username}'s profile picture`;
+
+    // Username (display "You" for current user, make clickable for others)
+    const username = document.createElement('p');
+    username.classList.add('contest-username');
+
+    if (user.username === currentUsername) {
+      username.textContent = 'You';
+    } else {
+      const usernameLink = document.createElement('a');
+      usernameLink.href = `https://leetcode.com/${user.username}`;
+      usernameLink.textContent = user.username;
+      usernameLink.target = '_blank';
+      usernameLink.classList.add('username-link');
+      username.appendChild(usernameLink);
+    }
+
+    // Medal for top 3 positions
+    let medal = null;
+    if (idx === 0) {
+      medal = document.createElement('img');
+      medal.classList.add('medal-icon');
+      medal.src = '../gold-medal.png';
+      medal.alt = 'Gold medal';
+    } else if (idx === 1) {
+      medal = document.createElement('img');
+      medal.classList.add('medal-icon');
+      medal.src = '../silver-medal.png';
+      medal.alt = 'Silver medal';
+    } else if (idx === 2) {
+      medal = document.createElement('img');
+      medal.classList.add('medal-icon');
+      medal.src = '../bronze-medal.png';
+      medal.alt = 'Bronze medal';
+    }
+
+    // Problem indicators (circles showing difficulty)
+    const problemIndicators = document.createElement('div');
+    problemIndicators.classList.add('contest-problem-indicators');
+
+    // Count problems by difficulty
+    const difficultyCounts = { Easy: 0, Medium: 0, Hard: 0 };
+    user.submissions.forEach(submission => {
+      if (difficultyCounts.hasOwnProperty(submission.difficulty)) {
+        difficultyCounts[submission.difficulty]++;
+      }
+    });
+
+    // Create circles for each difficulty
+    let circleString = '';
+    for (let i = 0; i < difficultyCounts.Easy; i++) {
+      circleString += '🟢';
+    }
+    for (let i = 0; i < difficultyCounts.Medium; i++) {
+      circleString += '🟡';
+    }
+    for (let i = 0; i < difficultyCounts.Hard; i++) {
+      circleString += '🔴';
+    }
+
+    problemIndicators.textContent = circleString || '—';
+
+    // Points
+    const pointsContainer = document.createElement('div');
+    pointsContainer.classList.add('contest-points-container');
+
+    const points = document.createElement('p');
+    points.classList.add('contest-points');
+    points.textContent = user.points;
+
+    const pointsLabel = document.createElement('span');
+    pointsLabel.classList.add('contest-points-label');
+    pointsLabel.textContent = 'pts';
+
+    pointsContainer.appendChild(points);
+    pointsContainer.appendChild(pointsLabel);
+
+    listItem.appendChild(rank);
+    listItem.appendChild(avatar);
+    listItem.appendChild(username);
+    if (medal) {
+      listItem.appendChild(medal);
+    }
+    listItem.appendChild(problemIndicators);
+    listItem.appendChild(pointsContainer);
+
+    list.appendChild(listItem);
+  });
+
+  resultsContainer.appendChild(list);
+}
+
+// Track the current render ID to prevent race conditions
+let currentRenderID = 0;
+
+export async function displayACSubmissions(submissions, username, filterText = '') {
   const resultsContainer = document.getElementById('graphql-results');
+
+  // Increment render ID to invalidate previous renders
+  const renderID = ++currentRenderID;
+
   resultsContainer.innerHTML = ''; // Clear previous results
 
   if (!submissions || submissions.length === 0) {
@@ -349,7 +485,7 @@ export async function displayACSubmissions(submissions, username) {
     return y.timestamp - x.timestamp;
   })
   console.log(submissions)
-  
+
 
   // Fetch all difficulties
   const submissionWithDifficultyPromises = submissions.map(async (submission) => {
@@ -358,14 +494,39 @@ export async function displayACSubmissions(submissions, username) {
     return { ...submission, difficulty };
   });
 
-  // wait for fetching difficulties and then populate activity list with submissions in 
+  // wait for fetching difficulties and then populate activity list with submissions in
   // order of most recent
   Promise.all(submissionWithDifficultyPromises).then((submissionsWithDiff) => {
+    // Check if this render is still valid (not superseded by a newer search)
+    if (renderID !== currentRenderID) {
+      return; // Discard outdated results
+    }
+
+    // Clear again right before rendering to ensure no stale content
+    resultsContainer.innerHTML = '';
+
     const list = document.createElement('ul');
     list.classList.add('submission-list');
 
-    submissionsWithDiff.forEach( submission => {
+    // Apply filter
+    const filter = filterText.toLowerCase().trim();
+    let filteredSubmissions = submissionsWithDiff;
+
+    if (filter) {
+      filteredSubmissions = submissionsWithDiff.filter(submission => {
+        const submissionUsername = submission.username.toLowerCase();
+        return submissionUsername.includes(filter) || (submission.username === username && 'you'.includes(filter));
+      });
+    }
+
+    if (filteredSubmissions.length === 0) {
+      resultsContainer.innerHTML = `<p>No submissions found for "${filterText}".</p>`;
+      return;
+    }
+
+    filteredSubmissions.forEach( submission => {
       // display current user as You
+      const originalUsername = submission.username;
       if (submission.username === username) {
         submission.username = "You";
       }
@@ -377,13 +538,13 @@ export async function displayACSubmissions(submissions, username) {
       // create "User solved problem" with link
       const title = document.createElement('p');
       title.classList.add('submission-title');
-      
+
       const titleLink = document.createElement('a');
       titleLink.href = problemLink;
       titleLink.textContent = submission.title;
       titleLink.target = '_blank'; // open link in a new tab
-      titleLink.classList.add('submission-link'); 
-      
+      titleLink.classList.add('submission-link');
+
       title.innerHTML = `${submission.username} solved `;
       title.appendChild(titleLink);
 
@@ -406,7 +567,7 @@ export async function displayACSubmissions(submissions, username) {
       list.appendChild(listItem);
     });
 
-    resultsContainer.appendChild(list) 
+    resultsContainer.appendChild(list)
   });
 
 }

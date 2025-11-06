@@ -1,10 +1,11 @@
 import getACSubmissions from '../GQLQueries/recentACSubmissions.js';
 import getUserProblemStats from '../GQLQueries/getUserProblemStats.js';
 import getUserProfilePic from '../GQLQueries/getUserProfilePic.js';
-import { displayFriendsList, displayLeaderboard, displayACSubmissions, displayStrikesUsers } from './display.js';
-import cache from '../utils/cache.js';
+import { displayFriendsList, displayLeaderboard, displayACSubmissions, displayStrikesUsers, displayContestLeaderboard } from './display.js';
+import cache, { TTL, getTTLUntilMidnight } from '../utils/cache.js';
 import { createUpdateTimer, getSubmissionsCacheKeys, getUserStatsCacheKeys } from '../utils/updateTimer.js';
 import { getLocalDateString, getTodayInTimezone, getUserTimezone } from '../utils/timezoneHelper.js';
+import questionDifficulty from '../GQLQueries/questionDifficulty.js';
 
 // Global timer references
 let activityTimer = null;
@@ -31,7 +32,9 @@ document.getElementById('submit-username').addEventListener('click', async () =>
     } else {
       chrome.storage.local.set({ username: username }, async function() {
         console.log('Username is set to ' + username);
+        currentUsername = username;
         const data = await getACSubmissions(username, 5);
+        cachedActivitySubmissions = data;
         displayACSubmissions(data, username);
         showPage('activity');
 
@@ -52,6 +55,11 @@ document.getElementById('submit-username').addEventListener('click', async () =>
           cachedClearedStrikesData = clearedStrikesUsers;
           cachedStreaksData = streaksUsers;
           displayStrikesUsers(strikesUsers, clearedStrikesUsers, streaksUsers, username);
+
+          // Load contest data
+          const contestResult = await loadContestData([], username, timezone);
+          cachedContestData = contestResult.contestData;
+          displayContestLeaderboard(contestResult.contestData, contestResult.weekStart, contestResult.weekEnd, username);
 
           // Load leaderboard data
           let leaderboardData = [await getUserProblemStats(username)];
@@ -124,6 +132,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             const data = await getACSubmissions(result.username, 5);
             allSubmissions = allSubmissions.concat(data);
             const currUsername = result.username;
+            currentUsername = currUsername;
 
             // load in friend data
             chrome.storage.local.get({ friends: [] }, async (result) => {
@@ -135,6 +144,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 friendData.forEach((submissions) => {
                   allSubmissions = allSubmissions.concat(submissions);
                 })
+                cachedActivitySubmissions = allSubmissions;
                 displayACSubmissions(allSubmissions, currUsername);
               });
               // default to activity page
@@ -160,6 +170,11 @@ document.addEventListener('DOMContentLoaded', async function() {
                 cachedClearedStrikesData = clearedStrikesUsers;
                 cachedStreaksData = streaksUsers;
                 displayStrikesUsers(strikesUsers, clearedStrikesUsers, streaksUsers, currUsername);
+
+                // Load contest data
+                const contestResult = await loadContestData(result.friends, currUsername, timezone);
+                cachedContestData = contestResult.contestData;
+                displayContestLeaderboard(contestResult.contestData, contestResult.weekStart, contestResult.weekEnd, currUsername);
 
                 // Initialize strikes timer (uses submissions for 30 items)
                 if (strikesTimer) strikesTimer.destroy();
@@ -348,7 +363,23 @@ async function loadStrikesUsersData(friends, username, maxStrikes = 3, timezone 
   if (timezone === 'auto') {
     timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   }
-  let allUsers = [username, ...friends];
+
+  // Get today's date in the timezone for cache key
+  const todayStr = getTodayInTimezone(timezone);
+
+  // Create cache key based on all users, maxStrikes, and today's date
+  const allUsers = [username, ...friends].sort();
+  const cacheKey = `strikes_${allUsers.join('_')}_${maxStrikes}_${todayStr}`;
+
+  // Check cache first
+  const cachedData = await cache.get(cacheKey);
+  if (cachedData !== null) {
+    console.log(`Cache hit for strikes data: ${cacheKey}`);
+    return cachedData;
+  }
+
+  console.log(`Cache miss for strikes data: ${cacheKey}, fetching from API`);
+
   let strikesUsers = [];
   let clearedStrikesUsers = [];
   let streaksUsers = [];
@@ -467,7 +498,153 @@ async function loadStrikesUsersData(friends, username, maxStrikes = 3, timezone 
   // Sort streaks by streak count descending (longest streak first)
   streaksUsers.sort((a, b) => b.streak - a.streak);
 
-  return { strikesUsers, clearedStrikesUsers, streaksUsers };
+  const result = { strikesUsers, clearedStrikesUsers, streaksUsers };
+
+  // Calculate TTL: 10 minutes, but not past midnight in the user's timezone
+  const ttlUntilMidnight = getTTLUntilMidnight(timezone);
+  const ttl = Math.min(TTL.SUBMISSIONS, ttlUntilMidnight);
+
+  // Cache the result
+  await cache.set(cacheKey, result, ttl);
+
+  return result;
+}
+
+
+/**
+ * Helper function to get the start and end of the current week (Monday-Sunday)
+ * @param {string} timezone - IANA timezone string (e.g., "America/Chicago") or 'auto' for auto-detect
+ * @returns {object} - Object containing weekStart and weekEnd Date objects
+ */
+function getCurrentWeekBounds(timezone = 'America/Chicago') {
+  // Handle auto-detect timezone
+  if (timezone === 'auto') {
+    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  }
+
+  // Get today in the specified timezone
+  const todayStr = getTodayInTimezone(timezone);
+  const todayParts = todayStr.split('-');
+  const today = new Date(Date.UTC(parseInt(todayParts[0]), parseInt(todayParts[1]) - 1, parseInt(todayParts[2])));
+
+  // Get day of week (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+  const dayOfWeek = today.getUTCDay();
+
+  // Calculate days since Monday (Monday = 1, so adjust for Monday being start of week)
+  const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+
+  // Calculate Monday of this week
+  const weekStart = new Date(today);
+  weekStart.setUTCDate(today.getUTCDate() - daysSinceMonday);
+
+  // Calculate Sunday of this week
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
+
+  return { weekStart, weekEnd };
+}
+
+
+/**
+ * Helper function to check if a timestamp is within the current week (Monday-Sunday)
+ * @param {number} timestamp - Unix timestamp in seconds
+ * @param {Date} weekStart - Start of week (Monday)
+ * @param {Date} weekEnd - End of week (Sunday)
+ * @param {string} timezone - IANA timezone string
+ * @returns {boolean} - True if timestamp is within the current week
+ */
+function isInCurrentWeek(timestamp, weekStart, weekEnd, timezone) {
+  const submissionDate = getLocalDateString(timestamp, timezone);
+  const weekStartStr = weekStart.toISOString().split('T')[0];
+  const weekEndStr = weekEnd.toISOString().split('T')[0];
+
+  return submissionDate >= weekStartStr && submissionDate <= weekEndStr;
+}
+
+
+/**
+ * Loads contest leaderboard data for the current week (Monday-Sunday)
+ * Calculates points based on difficulty: Easy = 1pt, Medium = 3pt, Hard = 6pt
+ * @param {string[]} friends - An array of usernames representing the friends of the current user
+ * @param {string} username - The username of the current user
+ * @param {string} timezone - IANA timezone string (e.g., "America/Chicago") or 'auto' for auto-detect
+ * @returns {object} - Object containing contestData array and week info
+ */
+async function loadContestData(friends, username, timezone = 'America/Chicago') {
+  // Handle auto-detect timezone
+  if (timezone === 'auto') {
+    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  }
+
+  const { weekStart, weekEnd } = getCurrentWeekBounds(timezone);
+  const weekStartFormatted = weekStart.toISOString().split('T')[0];
+  const weekEndFormatted = weekEnd.toISOString().split('T')[0];
+
+  // Create cache key based on all users and current week
+  const allUsers = [username, ...friends].sort();
+  const cacheKey = `contest_${allUsers.join('_')}_${weekStartFormatted}`;
+
+  // Check cache first
+  const cachedData = await cache.get(cacheKey);
+  if (cachedData !== null) {
+    console.log(`Cache hit for contest data: ${cacheKey}`);
+    return cachedData;
+  }
+
+  console.log(`Cache miss for contest data: ${cacheKey}, fetching from API`);
+
+  const contestData = [];
+
+  // Fetch submissions for each user
+  for (const user of allUsers) {
+    const submissions = await getACSubmissions(user, 50); // Get more submissions to cover the week
+    const userData = await getUserProfilePic(user);
+
+    // Filter submissions for current week
+    const weekSubmissions = submissions.filter(submission =>
+      isInCurrentWeek(submission.timestamp, weekStart, weekEnd, timezone)
+    );
+
+    // Calculate points for each submission
+    let totalPoints = 0;
+    const problemsWithDifficulty = await Promise.all(
+      weekSubmissions.map(async (submission) => {
+        const problemData = await questionDifficulty(submission.titleSlug);
+        const difficulty = problemData.difficulty;
+        let points = 0;
+
+        if (difficulty === 'Easy') points = 1;
+        else if (difficulty === 'Medium') points = 3;
+        else if (difficulty === 'Hard') points = 6;
+
+        totalPoints += points;
+
+        return { ...submission, difficulty, points };
+      })
+    );
+
+    contestData.push({
+      username: user,
+      avatar: userData.userAvatar,
+      points: totalPoints,
+      submissions: problemsWithDifficulty,
+      submissionCount: weekSubmissions.length
+    });
+  }
+
+  // Sort by points descending
+  contestData.sort((a, b) => b.points - a.points);
+
+  const result = {
+    contestData,
+    weekStart: weekStartFormatted,
+    weekEnd: weekEndFormatted
+  };
+
+  // Cache the result with 30-minute TTL
+  await cache.set(cacheKey, result, TTL.CONTEST);
+
+  return result;
 }
 
 
@@ -572,6 +749,9 @@ let cachedStrikesData = [];
 let cachedClearedStrikesData = [];
 let cachedStreaksData = [];
 let cachedDailyData = null;
+let cachedContestData = [];
+let cachedActivitySubmissions = [];
+let currentUsername = '';
 
 document.getElementById('copy-strikes-btn').addEventListener('click', () => {
   if ((!cachedStrikesData || cachedStrikesData.length === 0) && (!cachedClearedStrikesData || cachedClearedStrikesData.length === 0) && (!cachedStreaksData || cachedStreaksData.length === 0)) {
@@ -659,11 +839,25 @@ document.getElementById('refresh-all-btn').addEventListener('click', async () =>
         await cache.delete(`submissions_${user}_5`);
         await cache.delete(`submissions_${user}_20`);
         await cache.delete(`submissions_${user}_30`);
+        await cache.delete(`submissions_${user}_50`);
         await cache.delete(`user_stats_${user}`);
       }
 
+      // Clear contest cache
+      const { weekStart } = getCurrentWeekBounds(timezone);
+      const weekStartFormatted = weekStart.toISOString().split('T')[0];
+      const sortedUsers = [...allUsers].sort();
+      const contestCacheKey = `contest_${sortedUsers.join('_')}_${weekStartFormatted}`;
+      await cache.delete(contestCacheKey);
+
+      // Clear strikes cache
+      const todayStr = getTodayInTimezone(timezone);
+      const strikesCacheKey = `strikes_${sortedUsers.join('_')}_${maxStrikes}_${todayStr}`;
+      await cache.delete(strikesCacheKey);
+
       // Reload all data
       // Activity
+      currentUsername = username;
       let allSubmissions = [];
       const data = await getACSubmissions(username, 5);
       allSubmissions = allSubmissions.concat(data);
@@ -672,6 +866,7 @@ document.getElementById('refresh-all-btn').addEventListener('click', async () =>
       friendData.forEach((submissions) => {
         allSubmissions = allSubmissions.concat(submissions);
       });
+      cachedActivitySubmissions = allSubmissions;
       displayACSubmissions(allSubmissions, username);
 
       // Leaderboard
@@ -717,6 +912,11 @@ document.getElementById('refresh-all-btn').addEventListener('click', async () =>
       cachedStreaksData = streaksUsers;
       displayStrikesUsers(strikesUsers, clearedStrikesUsers, streaksUsers, username);
 
+      // Contest
+      const contestResult = await loadContestData(friends, username, timezone);
+      cachedContestData = contestResult.contestData;
+      displayContestLeaderboard(contestResult.contestData, contestResult.weekStart, contestResult.weekEnd, username);
+
       // Restart all timers
       if (activityTimer) activityTimer.destroy();
       activityTimer = createUpdateTimer('activity', getSubmissionsCacheKeys(allUsers, 5));
@@ -748,12 +948,29 @@ document.getElementById('refresh-all-btn').addEventListener('click', async () =>
  */
 document.getElementById('activity-tab').addEventListener('click', () => showPage('activity'));
 document.getElementById('leaderboard-tab').addEventListener('click', () => showPage('leaderboard'));
+document.getElementById('contest-tab').addEventListener('click', () => showPage('contest'));
 document.getElementById('strikes-tab').addEventListener('click', () => showPage('strikes'));
 
 /**
  * Listener for settings icon in navbar
  */
 document.getElementById('settings-icon').addEventListener('click', () => showPage('settings'));
+
+/**
+ * Listener for activity search filter
+ */
+document.getElementById('activity-search').addEventListener('input', (e) => {
+  const filterText = e.target.value;
+  displayACSubmissions(cachedActivitySubmissions, currentUsername, filterText);
+});
+
+/**
+ * Listener for clear filter button
+ */
+document.getElementById('activity-clear-filter').addEventListener('click', () => {
+  document.getElementById('activity-search').value = '';
+  displayACSubmissions(cachedActivitySubmissions, currentUsername, '');
+});
 
 /**
  * Changes which page is shown as content based off tab bar.

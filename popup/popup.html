@@ -19,6 +19,7 @@
     <div class="tab-bar">
       <button id="activity-tab" class="tab">Activity</button>
       <button id="leaderboard-tab" class="tab">Leaderboard</button>
+      <button id="contest-tab" class="tab">Contest</button>
       <button id="strikes-tab" class="tab">Strikes</button>
     </div>
     <div class="content">
@@ -31,6 +32,10 @@
       <div id="activity" class="page">
         <div class="page-header">
           <h2>Activity</h2>
+        </div>
+        <div class="activity-filter">
+          <input type="text" id="activity-search" placeholder="Filter by username..." />
+          <button id="activity-clear-filter" class="clear-filter-btn">✕</button>
         </div>
         <div id="graphql-results"></div>
       </div>
@@ -49,6 +54,17 @@
         <div id="leaderboard-results"></div>
         <!-- <p>Problems Solved</p>
       <div id="all-problems-board"></div> -->
+      </div>
+
+      <div id="contest" class="page">
+        <div class="page-header">
+          <h2>Contest</h2>
+        </div>
+        <p class="contest-description">Weekly competition (Mon-Sun) - Easy: 1pt, Medium: 3pt, Hard: 6pt</p>
+        <div class="contest-week-info">
+          <p id="contest-week-dates"></p>
+        </div>
+        <div id="contest-results"></div>
       </div>
 
       <div id="strikes" class="page">

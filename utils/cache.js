@@ -220,9 +220,69 @@ class Cache {
 // TTL constants (in milliseconds)
 export const TTL = {
     PROFILE_PIC: 24 * 60 * 60 * 1000,      // 24 hours
-    USER_STATS: 2 * 60 * 60 * 1000,        // 2 hours
+    USER_STATS: 60 * 60 * 1000,            // 1 hour
     SUBMISSIONS: 10 * 60 * 1000,            // 10 minutes
-    DAILY_LEADERBOARD: 5 * 60 * 1000        // 5 minutes
+    DAILY_LEADERBOARD: 5 * 60 * 1000,       // 5 minutes
+    CONTEST: 30 * 60 * 1000,                // 30 minutes
+    STRIKES: 30 * 60 * 1000                 // 30 minutes
 };
+
+/**
+ * Calculate TTL until midnight in a specific timezone
+ * @param {string} timezone - IANA timezone string (e.g., "America/Chicago")
+ * @returns {number} - Milliseconds until midnight in the specified timezone
+ */
+export function getTTLUntilMidnight(timezone) {
+    const now = new Date();
+
+    // Get current date/time in the specified timezone
+    const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    });
+
+    const parts = formatter.formatToParts(now);
+    const dateParts = {};
+    parts.forEach(part => {
+        if (part.type !== 'literal') {
+            dateParts[part.type] = part.value;
+        }
+    });
+
+    // Create a date object for midnight tomorrow in the target timezone
+    const year = parseInt(dateParts.year);
+    const month = parseInt(dateParts.month);
+    const day = parseInt(dateParts.day);
+
+    // Create date string for tomorrow at midnight
+    const tomorrowDate = new Date(year, month - 1, day);
+    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+
+    // Format as ISO string and get midnight in the target timezone
+    const tomorrowStr = `${tomorrowDate.getFullYear()}-${String(tomorrowDate.getMonth() + 1).padStart(2, '0')}-${String(tomorrowDate.getDate()).padStart(2, '0')}T00:00:00`;
+
+    // Parse this string as if it's in the target timezone
+    const tomorrowInTargetTZ = new Date(tomorrowStr + 'Z');
+
+    // Get offset for target timezone
+    const nowInTargetTZ = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+    const offset = now.getTime() - nowInTargetTZ.getTime();
+
+    // Calculate midnight tomorrow
+    const midnightTomorrow = new Date(
+        Date.UTC(year, month - 1, day + 1, 0, 0, 0, 0)
+    ).getTime() + offset;
+
+    const ttl = midnightTomorrow - now.getTime();
+
+    // Return at least 30 minutes to avoid immediate expiration
+    return Math.max(ttl, TTL.STRIKES);
+}
 
 export default new Cache();
