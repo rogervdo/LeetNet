@@ -20,6 +20,7 @@
       <button id="activity-tab" class="tab">Activity</button>
       <button id="leaderboard-tab" class="tab">Leaderboard</button>
       <button id="contest-tab" class="tab">Contest</button>
+      <button id="global-rankings-tab" class="tab">Global</button>
       <button id="strikes-tab" class="tab">Strikes</button>
     </div>
     <div class="content">
@@ -67,6 +68,14 @@
         <div id="contest-results"></div>
       </div>
 
+      <div id="global-rankings" class="page">
+        <div class="page-header">
+          <h2>Global Rankings</h2>
+        </div>
+        <p class="global-rankings-description">Problem-solving rank among your group. Change vs your most recent saved snapshot.</p>
+        <div id="global-rankings-results"></div>
+      </div>
+
       <div id="strikes" class="page">
         <div class="strikes-header">
           <div class="page-header">
@@ -92,6 +101,47 @@
           <div class="settings-item">
             <label>Friends List</label>
             <div id="friends-list-container"></div>
+          </div>
+        </div>
+        <div class="settings-section">
+          <h3>Visible Tabs</h3>
+          <p class="settings-description">Choose which tabs appear in the navigation bar.</p>
+          <div id="tab-visibility-toggles" class="tab-visibility-list">
+            <div class="tab-toggle-item">
+              <span class="tab-toggle-label">Activity</span>
+              <label class="toggle-switch">
+                <input type="checkbox" data-tab-key="activity" checked />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="tab-toggle-item">
+              <span class="tab-toggle-label">Leaderboard</span>
+              <label class="toggle-switch">
+                <input type="checkbox" data-tab-key="leaderboard" checked />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="tab-toggle-item">
+              <span class="tab-toggle-label">Contest</span>
+              <label class="toggle-switch">
+                <input type="checkbox" data-tab-key="contest" checked />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="tab-toggle-item">
+              <span class="tab-toggle-label">Global</span>
+              <label class="toggle-switch">
+                <input type="checkbox" data-tab-key="globalRankings" checked />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="tab-toggle-item">
+              <span class="tab-toggle-label">Strikes</span>
+              <label class="toggle-switch">
+                <input type="checkbox" data-tab-key="strikes" checked />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
           </div>
         </div>
         <div class="settings-section">

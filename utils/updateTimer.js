@@ -123,3 +123,12 @@ export function getSubmissionsCacheKeys(usernames, limit) {
 export function getUserStatsCacheKeys(usernames) {
     return usernames.map(username => `user_stats_${username}`);
 }
+
+/**
+ * Generate cache keys for global ranking data
+ * @param {string[]} usernames - Array of usernames
+ * @returns {string[]} - Array of cache keys
+ */
+export function getGlobalRankingCacheKeys(usernames) {
+    return usernames.map(username => `problem_ranking_${username}`);
+}

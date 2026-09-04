@@ -224,7 +224,8 @@ export const TTL = {
     SUBMISSIONS: 10 * 60 * 1000,            // 10 minutes
     DAILY_LEADERBOARD: 5 * 60 * 1000,       // 5 minutes
     CONTEST: 30 * 60 * 1000,                // 30 minutes
-    STRIKES: 30 * 60 * 1000                 // 30 minutes
+    STRIKES: 30 * 60 * 1000,                // 30 minutes
+    GLOBAL_RANKING: 60 * 60 * 1000          // 1 hour
 };
 
 /**

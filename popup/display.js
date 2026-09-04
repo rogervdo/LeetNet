@@ -466,6 +466,232 @@ export function displayContestLeaderboard(contestData, weekStart, weekEnd, curre
   resultsContainer.appendChild(list);
 }
 
+/**
+ * Formats a number as an ordinal string (1st, 2nd, 3rd, etc.)
+ * @param {number} n - The number to format
+ * @returns {string} - Ordinal string
+ */
+function formatOrdinal(n) {
+  const suffixes = ['th', 'st', 'nd', 'rd'];
+  const mod100 = n % 100;
+  const suffix = suffixes[(mod100 - 20) % 10] || suffixes[mod100] || suffixes[0];
+  return `${n}${suffix}`;
+}
+
+/**
+ * Formats a problem rank number with commas
+ * @param {number} rank - Problem rank number
+ * @returns {string} - Formatted rank string
+ */
+function formatProblemRankValue(rank) {
+  return rank.toLocaleString();
+}
+
+/**
+ * Formats rank change delta with commas
+ * @param {number} delta - Rank change amount
+ * @returns {string} - Formatted delta string
+ */
+function formatRankChange(delta) {
+  return Math.abs(delta).toLocaleString();
+}
+
+/**
+ * Formats a snapshot date for display in tooltips
+ * @param {string} dateStr - YYYY-MM-DD date string
+ * @returns {string} - Formatted date string
+ */
+function formatSnapshotDate(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function getRankChangeTitle(user, improved) {
+  const action = improved ? 'Improved' : 'Dropped';
+
+  if (user.changeSource === 'priorDay' && user.changeReferenceDate) {
+    return `${action} since ${formatSnapshotDate(user.changeReferenceDate)}`;
+  }
+
+  if (user.changeSource === 'lastView') {
+    return `${action} vs last view`;
+  }
+
+  return improved ? 'Rank improved' : 'Rank dropped';
+}
+
+function getNoChangeTitle(user) {
+  if (user.changeSource === 'priorDay' && user.changeReferenceDate) {
+    return `No change since ${formatSnapshotDate(user.changeReferenceDate)}`;
+  }
+
+  if (user.changeSource === 'lastView') {
+    return 'No change since last view';
+  }
+
+  return 'No change';
+}
+
+/**
+ * Displays problem-solving global rankings for selected users
+ * @param {Array} rankingsData - Array of user ranking objects
+ * @param {string} currentUsername - The current user's username
+ */
+export function displayGlobalRankings(rankingsData, currentUsername) {
+  const resultsContainer = document.getElementById('global-rankings-results');
+  resultsContainer.innerHTML = '';
+
+  if (!rankingsData || rankingsData.length === 0) {
+    resultsContainer.innerHTML = '<p>No ranking data available.</p>';
+    return;
+  }
+
+  const rankedUsers = rankingsData.filter((user) => user.problemRank !== null);
+  const unrankedUsers = rankingsData.filter((user) => user.problemRank === null);
+
+  rankedUsers.sort((a, b) => a.problemRank - b.problemRank);
+
+  const list = document.createElement('ul');
+  list.classList.add('global-rankings-list');
+
+  rankedUsers.forEach((user, idx) => {
+    const listItem = document.createElement('li');
+    listItem.classList.add('global-rankings-row');
+
+    const left = document.createElement('div');
+    left.classList.add('global-rankings-left');
+
+    const spot = document.createElement('span');
+    spot.classList.add('global-rankings-spot');
+    spot.textContent = formatOrdinal(idx + 1);
+
+    const avatar = document.createElement('img');
+    avatar.classList.add('global-rankings-avatar');
+    avatar.src = user.avatar;
+    avatar.alt = `${user.username}'s profile picture`;
+
+    const username = document.createElement('span');
+    username.classList.add('global-rankings-username');
+
+    if (user.username === currentUsername) {
+      username.classList.add('is-you');
+      username.textContent = 'You';
+    } else {
+      const usernameLink = document.createElement('a');
+      usernameLink.href = `https://leetcode.com/${user.username}`;
+      usernameLink.textContent = user.username;
+      usernameLink.target = '_blank';
+      usernameLink.classList.add('username-link');
+      username.appendChild(usernameLink);
+    }
+
+    left.appendChild(spot);
+    left.appendChild(avatar);
+    left.appendChild(username);
+
+    if (idx < 3) {
+      const medal = document.createElement('img');
+      medal.classList.add('global-rankings-medal');
+      medal.src = idx === 0 ? '../gold-medal.png' : idx === 1 ? '../silver-medal.png' : '../bronze-medal.png';
+      medal.alt = idx === 0 ? 'Gold medal' : idx === 1 ? 'Silver medal' : 'Bronze medal';
+      left.appendChild(medal);
+    }
+
+    const change = document.createElement('div');
+    change.classList.add('global-rankings-change');
+
+    if (user.rankChange !== null && user.rankChange !== 0) {
+      if (user.rankChange > 0) {
+        change.classList.add('up');
+        change.textContent = `↑ ${formatRankChange(user.rankChange)}`;
+        change.title = getRankChangeTitle(user, true);
+      } else {
+        change.classList.add('down');
+        change.textContent = `↓ ${formatRankChange(user.rankChange)}`;
+        change.title = getRankChangeTitle(user, false);
+      }
+    } else if (user.rankChange === 0) {
+      change.classList.add('neutral', 'no-change');
+      change.textContent = '=';
+      change.title = getNoChangeTitle(user);
+    } else {
+      change.classList.add('neutral', 'no-data');
+      change.textContent = '—';
+      change.title = 'No previous data';
+    }
+
+    const rank = document.createElement('div');
+    rank.classList.add('global-rankings-rank');
+
+    const rankLabel = document.createElement('span');
+    rankLabel.classList.add('global-rankings-rank-label');
+    rankLabel.textContent = 'Rank';
+
+    const rankValue = document.createElement('span');
+    rankValue.classList.add('global-rankings-rank-value');
+    rankValue.textContent = formatProblemRankValue(user.problemRank);
+
+    rank.appendChild(rankLabel);
+    rank.appendChild(rankValue);
+
+    listItem.appendChild(left);
+    listItem.appendChild(change);
+    listItem.appendChild(rank);
+
+    list.appendChild(listItem);
+  });
+
+  unrankedUsers.forEach((user) => {
+    const listItem = document.createElement('li');
+    listItem.classList.add('global-rankings-row');
+
+    const left = document.createElement('div');
+    left.classList.add('global-rankings-left');
+
+    const spot = document.createElement('span');
+    spot.classList.add('global-rankings-spot');
+    spot.textContent = '—';
+
+    const avatar = document.createElement('img');
+    avatar.classList.add('global-rankings-avatar');
+    avatar.src = user.avatar;
+    avatar.alt = `${user.username}'s profile picture`;
+
+    const username = document.createElement('span');
+    username.classList.add('global-rankings-username');
+
+    if (user.username === currentUsername) {
+      username.classList.add('is-you');
+      username.textContent = 'You';
+    } else {
+      const usernameLink = document.createElement('a');
+      usernameLink.href = `https://leetcode.com/${user.username}`;
+      usernameLink.textContent = user.username;
+      usernameLink.target = '_blank';
+      usernameLink.classList.add('username-link');
+      username.appendChild(usernameLink);
+    }
+
+    left.appendChild(spot);
+    left.appendChild(avatar);
+    left.appendChild(username);
+
+    const unranked = document.createElement('span');
+    unranked.classList.add('global-rankings-unranked');
+    unranked.textContent = 'No rank';
+
+    listItem.appendChild(left);
+    listItem.appendChild(unranked);
+
+    list.appendChild(listItem);
+  });
+
+  resultsContainer.appendChild(list);
+}
+
 // Track the current render ID to prevent race conditions
 let currentRenderID = 0;
 
